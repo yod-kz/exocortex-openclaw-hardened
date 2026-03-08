@@ -103,10 +103,33 @@
   loop: "{{ openclaw_agents }}"
   when: item.state_repo is defined
 
-- name: Ensure sqlite3 is installed
-  apt:
-    name: sqlite3
-    state: present
+- name: Check if sqlite3 is installed
+  command: which sqlite3
+  register: _sqlite3_check
+  changed_when: false
+  failed_when: false
+
+- name: Install sqlite3 via Pipelock
+  when: _sqlite3_check.rc != 0
+  block:
+    - name: Configure apt proxy
+      copy:
+        content: |
+          Acquire::http::Proxy "http://{{ pipelock.listen }}";
+          Acquire::https::Proxy "http://{{ pipelock.listen }}";
+        dest: /etc/apt/apt.conf.d/90pipelock
+        mode: "0644"
+
+    - name: Install sqlite3
+      apt:
+        name: sqlite3
+        state: present
+        update_cache: true
+
+    - name: Remove apt proxy config
+      file:
+        path: /etc/apt/apt.conf.d/90pipelock
+        state: absent
 
 - name: Create agent memory directories
   file:

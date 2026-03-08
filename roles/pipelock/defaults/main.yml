@@ -19,8 +19,10 @@ _pipelock_defaults:
     - "*.docker.com"
     - "production.cloudflare.docker.com"
     - "ghcr.io"
-    # APT repos (telemetry package installs)
+    # APT repos (package installs)
     - "apt.grafana.com"
+    - "*.ubuntu.com"
+    - "*.debian.org"
 
   # Site config can add entries via pipelock.api_allowlist_extra
   api_allowlist_extra: []
