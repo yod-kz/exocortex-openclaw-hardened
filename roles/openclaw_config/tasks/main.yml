@@ -2,6 +2,10 @@
 # Writes openclaw.json with security hardening settings.
 # Runs after openclaw_onboard which ensures openclaw.json exists.
 
+- name: Merge openclaw config
+  set_fact:
+    openclaw: "{{ _openclaw_defaults | combine(openclaw | default({}), recursive=True) }}"
+
 # ── Control UI assets (workaround) ─────────────────────────────
 # pnpm hardlinks cause nlink > 1 on installed files. OpenClaw's gateway
 # rejects nlink > 1 in openBoundaryFileSync (security measure for

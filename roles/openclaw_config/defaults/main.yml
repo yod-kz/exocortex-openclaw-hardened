@@ -1,5 +1,5 @@
 ---
-openclaw:
+_openclaw_defaults:
   gateway_bind: "lan"
   gateway_port: 18789
   gateway_auth_mode: "password"

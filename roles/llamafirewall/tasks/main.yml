@@ -3,6 +3,10 @@
 # OpenClaw and the real inference endpoint. It scans all
 # inputs/outputs with PromptGuard 2 and CodeShield.
 
+- name: Merge llamafirewall config
+  set_fact:
+    llamafirewall: "{{ _llamafirewall_defaults | combine(llamafirewall | default({}), recursive=True) }}"
+
 - name: Install system dependencies
   apt:
     name:

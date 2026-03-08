@@ -1,4 +1,8 @@
 ---
+- name: Merge pipelock config
+  set_fact:
+    pipelock: "{{ _pipelock_defaults | combine(pipelock | default({}), recursive=True) }}"
+
 - name: Create pipelock system user
   user:
     name: pipelock

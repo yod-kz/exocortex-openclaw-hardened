@@ -1,4 +1,8 @@
 ---
+- name: Merge network config
+  set_fact:
+    network: "{{ network_defaults | combine(network | default({}), recursive=True) }}"
+
 - name: Ensure llamafirewall user exists (needed for nftables skuid rule)
   user:
     name: llamafirewall

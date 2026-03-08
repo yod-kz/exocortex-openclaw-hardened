@@ -1,5 +1,5 @@
 ---
-docker:
+_docker_defaults:
   default_runtime: "runsc"
   no_new_privileges: true
   log_max_size: "10m"

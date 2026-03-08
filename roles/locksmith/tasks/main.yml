@@ -1,4 +1,8 @@
 ---
+- name: Merge locksmith config
+  set_fact:
+    locksmith: "{{ _locksmith_defaults | combine(locksmith | default({}), recursive=True) }}"
+
 - name: Create locksmith system user
   user:
     name: locksmith

@@ -1,4 +1,8 @@
 ---
+- name: Merge docker config
+  set_fact:
+    docker: "{{ _docker_defaults | combine(docker | default({}), recursive=True) }}"
+
 - name: Check if gVisor (runsc) is installed
   command: which runsc
   register: runsc_check

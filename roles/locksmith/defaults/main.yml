@@ -1,5 +1,5 @@
 ---
-locksmith:
+_locksmith_defaults:
   enabled: false
   version: "latest"
   listen_host: "127.0.0.1"

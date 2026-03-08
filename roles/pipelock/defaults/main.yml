@@ -1,5 +1,5 @@
 ---
-pipelock:
+_pipelock_defaults:
   version: "latest"
   listen: "0.0.0.0:8888"
   mode: "balanced"
