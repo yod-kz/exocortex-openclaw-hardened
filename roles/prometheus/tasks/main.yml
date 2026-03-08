@@ -1,0 +1,79 @@
+---
+# Prometheus — scrapes OTel Collector metrics exporter and Phoenix
+
+- name: Create prometheus user
+  user:
+    name: prometheus
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create prometheus directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: "0755"
+  loop:
+    - /opt/prometheus
+    - /var/lib/prometheus
+    - /etc/prometheus
+
+- name: Detect architecture
+  set_fact:
+    prom_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+
+- name: Allow temporary egress for download
+  command: >
+    nft insert rule inet openclaw output
+    ip daddr != { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 }
+    tcp dport { 80, 443 }
+    accept
+    comment "temp-prometheus-download"
+
+- name: Download Prometheus
+  get_url:
+    url: "https://github.com/prometheus/prometheus/releases/download/v{{ telemetry.prometheus.version }}/prometheus-{{ telemetry.prometheus.version }}.linux-{{ prom_arch }}.tar.gz"
+    dest: /tmp/prometheus.tar.gz
+    mode: "0644"
+    timeout: 60
+
+- name: Remove temporary egress rule
+  shell: |
+    HANDLE=$(nft -a list chain inet openclaw output | grep 'temp-prometheus-download' | awk '{print $NF}')
+    [ -n "$HANDLE" ] && nft delete rule inet openclaw output handle "$HANDLE"
+  changed_when: true
+
+- name: Extract Prometheus
+  unarchive:
+    src: /tmp/prometheus.tar.gz
+    dest: /opt/prometheus
+    remote_src: true
+    extra_opts: [--strip-components=1]
+    creates: /opt/prometheus/prometheus
+
+- name: Write Prometheus config
+  template:
+    src: prometheus.yml.j2
+    dest: /etc/prometheus/prometheus.yml
+    owner: prometheus
+    group: prometheus
+    mode: "0644"
+  notify: restart prometheus
+
+- name: Write systemd service
+  template:
+    src: prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart prometheus
+
+- name: Enable and start prometheus
+  systemd:
+    name: prometheus
+    enabled: true
+    state: started
+    daemon_reload: true

@@ -1,0 +1,24 @@
+---
+llamafirewall:
+  enabled: false
+  listen_host: "0.0.0.0"
+  listen_port: 9100
+  connect_host: "172.17.0.1"
+
+  promptguard:
+    enabled: true
+    model: "meta-llama/Prompt-Guard-2-86M"
+
+  codeshield:
+    enabled: true
+
+  alignmentcheck:
+    enabled: false
+
+  budget:
+    enabled: true
+    default_monthly_usd: 50.00
+    state_file: "/var/lib/llamafirewall/budget.json"
+
+  venv_path: "/opt/llamafirewall/venv"
+  app_path: "/opt/llamafirewall"

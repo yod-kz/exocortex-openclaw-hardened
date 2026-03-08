@@ -1,0 +1,30 @@
+[Unit]
+Description=Agent Locksmith
+After=network-online.target pipelock.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/locksmith --config /etc/locksmith/config.yaml
+Restart=always
+RestartSec=5
+
+User=locksmith
+Group=locksmith
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/locksmith
+PrivateTmp=true
+
+{% for tool in locksmith.tools %}
+{% if tool.api_key_env is defined and tool.api_key | default('') != '' %}
+Environment={{ tool.api_key_env }}={{ tool.api_key }}
+{% endif %}
+{% endfor %}
+{% if locksmith.inbound_token | default('') != '' %}
+Environment=LOCKSMITH_INBOUND_TOKEN={{ locksmith.inbound_token }}
+{% endif %}
+
+[Install]
+WantedBy=multi-user.target

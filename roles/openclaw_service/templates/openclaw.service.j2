@@ -1,0 +1,32 @@
+[Unit]
+Description=OpenClaw Gateway
+After=network-online.target docker.service pipelock.service
+Wants=network-online.target
+{% if llamafirewall.enabled | default(false) %}
+After=llamafirewall.service
+Wants=llamafirewall.service
+{% endif %}
+
+[Service]
+Type=simple
+User=openclaw
+Group=openclaw
+WorkingDirectory=/home/openclaw
+ExecStart={{ final_openclaw_binary }} gateway
+Restart=always
+RestartSec=5
+
+# TLS: self-signed certs on local inference endpoints
+{% if inference.endpoints | selectattr('tls_skip_verify', 'equalto', true) | list | length > 0 %}
+Environment=NODE_TLS_REJECT_UNAUTHORIZED=0
+{% endif %}
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/openclaw/.openclaw
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

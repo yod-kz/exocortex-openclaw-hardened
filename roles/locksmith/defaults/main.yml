@@ -1,0 +1,9 @@
+---
+locksmith:
+  enabled: false
+  version: "latest"
+  listen_host: "127.0.0.1"
+  listen_port: 9200
+  log_level: "info"
+  inbound_token: ""
+  tools: []

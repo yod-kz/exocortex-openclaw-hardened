@@ -1,0 +1,25 @@
+{
+    "default-runtime": "{{ docker.default_runtime }}",
+    "default-address-pools": [
+        {
+            "base": "{{ network.docker_cidr }}",
+            "size": 24
+        }
+    ],
+    "ip-forward": true,
+    "ip6tables": false,
+    "iptables": true,
+    "live-restore": true,
+    "log-driver": "json-file",
+    "log-opts": {
+        "max-file": "{{ docker.log_max_file }}",
+        "max-size": "{{ docker.log_max_size }}"
+    },
+    "no-new-privileges": {{ docker.no_new_privileges | to_json }},
+    "runtimes": {
+        "runsc": {
+            "path": "/usr/bin/runsc"
+        }
+    },
+    "userland-proxy": false
+}

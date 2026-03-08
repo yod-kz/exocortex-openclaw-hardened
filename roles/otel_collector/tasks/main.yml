@@ -1,0 +1,78 @@
+---
+# OpenTelemetry Collector — receives OTLP from all services,
+# exports traces to Phoenix and metrics to Prometheus.
+
+- name: Create otel-collector user
+  user:
+    name: otelcol
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create otel-collector directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: otelcol
+    group: otelcol
+    mode: "0755"
+  loop:
+    - /opt/otel-collector
+    - /etc/otel-collector
+
+- name: Detect architecture
+  set_fact:
+    otelcol_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+
+- name: Allow temporary egress for download
+  command: >
+    nft insert rule inet openclaw output
+    ip daddr != { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 }
+    tcp dport { 80, 443 }
+    accept
+    comment "temp-otelcol-download"
+
+- name: Download otelcol-contrib
+  get_url:
+    url: "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v{{ telemetry.otel_collector.version }}/otelcol-contrib_{{ telemetry.otel_collector.version }}_linux_{{ otelcol_arch }}.tar.gz"
+    dest: /tmp/otelcol-contrib.tar.gz
+    mode: "0644"
+    timeout: 60
+
+- name: Remove temporary egress rule
+  shell: |
+    HANDLE=$(nft -a list chain inet openclaw output | grep 'temp-otelcol-download' | awk '{print $NF}')
+    [ -n "$HANDLE" ] && nft delete rule inet openclaw output handle "$HANDLE"
+  changed_when: true
+
+- name: Extract otelcol-contrib binary
+  unarchive:
+    src: /tmp/otelcol-contrib.tar.gz
+    dest: /opt/otel-collector
+    remote_src: true
+    creates: /opt/otel-collector/otelcol-contrib
+
+- name: Write collector config
+  template:
+    src: otel-collector.yaml.j2
+    dest: /etc/otel-collector/config.yaml
+    owner: otelcol
+    group: otelcol
+    mode: "0644"
+  notify: restart otel-collector
+
+- name: Write systemd service
+  template:
+    src: otel-collector.service.j2
+    dest: /etc/systemd/system/otel-collector.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart otel-collector
+
+- name: Enable and start otel-collector
+  systemd:
+    name: otel-collector
+    enabled: true
+    state: started
+    daemon_reload: true

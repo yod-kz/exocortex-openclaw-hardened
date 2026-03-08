@@ -1,0 +1,55 @@
+---
+- name: Create pipelock system user
+  user:
+    name: pipelock
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create pipelock directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: pipelock
+    group: pipelock
+    mode: "0755"
+  loop:
+    - /etc/pipelock
+    - /var/log/pipelock
+
+- name: Check if pipelock binary exists
+  stat:
+    path: /usr/local/bin/pipelock
+  register: pipelock_bin
+
+- name: Download pipelock binary
+  get_url:
+    url: "https://github.com/luckyPipewrench/pipelock/releases/latest/download/pipelock-linux-amd64"
+    dest: /usr/local/bin/pipelock
+    mode: "0755"
+  when: not pipelock_bin.stat.exists
+
+- name: Write pipelock config
+  template:
+    src: pipelock.yaml.j2
+    dest: /etc/pipelock/pipelock.yaml
+    owner: root
+    group: pipelock
+    mode: "0644"
+  notify: restart pipelock
+
+- name: Write pipelock systemd service
+  template:
+    src: pipelock.service.j2
+    dest: /etc/systemd/system/pipelock.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart pipelock
+
+- name: Enable and start pipelock
+  systemd:
+    name: pipelock
+    enabled: true
+    state: started
+    daemon_reload: true

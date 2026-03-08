@@ -1,0 +1,4 @@
+---
+telemetry_grafana_defaults:
+  port: 3000
+  version: "11.6.0"

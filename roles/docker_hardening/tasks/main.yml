@@ -1,0 +1,63 @@
+---
+- name: Check if gVisor (runsc) is installed
+  command: which runsc
+  register: runsc_check
+  failed_when: false
+  changed_when: false
+
+- name: Install gVisor if missing
+  when: runsc_check.rc != 0
+  block:
+    - name: Add gVisor GPG key
+      shell: |
+        curl -fsSL https://gvisor.dev/archive.key | gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/gvisor-archive-keyring.gpg
+
+    - name: Add gVisor apt repo
+      copy:
+        content: "deb [arch=amd64 signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main"
+        dest: /etc/apt/sources.list.d/gvisor.list
+
+    - name: Install runsc
+      apt:
+        name: runsc
+        state: present
+        update_cache: true
+
+- name: Configure Docker daemon proxy (routes pulls through Pipelock)
+  file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: "0755"
+
+- name: Write Docker proxy environment
+  copy:
+    content: |
+      [Service]
+      Environment="HTTP_PROXY=http://127.0.0.1:{{ pipelock.listen | regex_replace('.*:', '') }}"
+      Environment="HTTPS_PROXY=http://127.0.0.1:{{ pipelock.listen | regex_replace('.*:', '') }}"
+      Environment="NO_PROXY=localhost,127.0.0.1,{{ network.subnet }},{{ network.docker_cidr }}"
+    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
+    mode: "0644"
+  notify: restart docker
+
+- name: Write Docker daemon.json
+  template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+    backup: true
+  notify: restart docker
+
+- name: Check if sandbox base image exists
+  command: docker image inspect debian:bookworm-slim
+  register: image_check
+  failed_when: false
+  changed_when: false
+
+- name: Pull sandbox base image
+  command: docker pull debian:bookworm-slim
+  register: docker_pull
+  changed_when: "'Downloaded newer' in docker_pull.stdout"
+  when: image_check.rc != 0

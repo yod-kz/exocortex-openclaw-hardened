@@ -1,0 +1,4 @@
+---
+# openclaw_agents defined in site config; empty by default
+openclaw_agents: []
+openclaw_data_dir: "/home/openclaw/.openclaw"

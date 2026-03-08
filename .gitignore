@@ -1,0 +1,10 @@
+*.vault_pass
+vault_password_file
+*.retry
+*.pem
+*.key
+*.crt
+*.secret
+CLAUDE.md.local
+*.local.yml
+.claude/

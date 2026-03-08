@@ -1,0 +1,75 @@
+---
+# Arize Phoenix — LLM trace backend and evaluation UI
+# Receives OTLP traces from the OTel Collector.
+
+- name: Create phoenix user
+  user:
+    name: phoenix
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create phoenix directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: phoenix
+    group: phoenix
+    mode: "0755"
+  loop:
+    - /opt/phoenix
+    - /opt/phoenix/venv
+    - "{{ telemetry.phoenix.db_dir }}"
+
+- name: Create Python virtual environment
+  command: python3 -m venv /opt/phoenix/venv
+  args:
+    creates: /opt/phoenix/venv/bin/python
+
+- name: Allow temporary egress for pip install
+  command: >
+    nft insert rule inet openclaw output
+    ip daddr != { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 }
+    tcp dport { 80, 443 }
+    accept
+    comment "temp-pip-phoenix"
+
+- name: Install Phoenix
+  pip:
+    name:
+      - arize-phoenix
+      - arize-phoenix-otel
+    virtualenv: /opt/phoenix/venv
+    state: present
+
+- name: Remove temporary egress rule
+  shell: |
+    HANDLE=$(nft -a list chain inet openclaw output | grep 'temp-pip-phoenix' | awk '{print $NF}')
+    [ -n "$HANDLE" ] && nft delete rule inet openclaw output handle "$HANDLE"
+  changed_when: true
+
+- name: Set ownership
+  file:
+    path: "{{ item }}"
+    owner: phoenix
+    group: phoenix
+    recurse: true
+  loop:
+    - /opt/phoenix
+    - "{{ telemetry.phoenix.db_dir }}"
+
+- name: Write systemd service
+  template:
+    src: phoenix.service.j2
+    dest: /etc/systemd/system/phoenix.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart phoenix
+
+- name: Enable and start phoenix
+  systemd:
+    name: phoenix
+    enabled: true
+    state: started
+    daemon_reload: true

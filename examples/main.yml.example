@@ -1,0 +1,306 @@
+# ═════════════════════════════════════════════════════════════
+# Shared configuration for all OpenClaw agent hosts
+#
+# This file drives the entire deployment. Edit these values
+# to deploy on a different host, network, or topology.
+#
+# Copy to: group_vars/agent_hosts/main.yml
+# ═════════════════════════════════════════════════════════════
+
+# ── Network Topology ─────────────────────────────────────────
+# Define your LAN layout: gateway, DNS, subnet, and which hosts
+# are allowed to communicate with agent nodes.
+network:
+  gateway_ip: "YOUR_GATEWAY_IP"          # Router / default gateway
+  dns_server: "YOUR_DNS_SERVER_IP"       # Usually same as gateway
+  subnet: "YOUR_SUBNET_CIDR"            # e.g. 192.168.1.0/24
+
+  # Only these LAN IPs can be reached from agent hosts.
+  # Keeps the blast radius small — add only inference and agent nodes.
+  allowed_lan_ips:
+    - { ip: "YOUR_GATEWAY_IP",       comment: "Gateway / DNS" }
+    - { ip: "YOUR_INFERENCE_HOST_IP", comment: "inference-host-1" }
+    - { ip: "YOUR_AGENT_HOST_IP",    comment: "agent-host-1" }
+
+  # Source CIDRs allowed to SSH and access management UIs
+  mgmt_cidrs:
+    - { cidr: "YOUR_LAN_CIDR",          comment: "Local LAN" }
+    - { cidr: "YOUR_WORKSTATION_IP/32",  comment: "Admin workstation" }
+    - { cidr: "100.64.0.0/10",          comment: "Tailscale CGNAT" }
+
+  # Ports your inference services listen on (used in nftables sets)
+  inference_ports:
+    - 443       # HTTPS (e.g. Kamiwaza)
+    - 11434     # Ollama
+    - 8091      # vLLM
+
+  # Docker bridge CIDR (must match daemon.json default-address-pools)
+  docker_cidr: "172.16.0.0/12"
+
+# ── Inference Endpoints ──────────────────────────────────────
+# Each endpoint becomes an OpenClaw provider. When LlamaFirewall is
+# enabled, traffic routes through localhost:9100/{provider_name}/
+# and the proxy forwards to the real upstream.
+inference:
+  endpoints:
+    # ── Local endpoint (on-prem inference server) ────────────
+    - provider_name: "my-local-model"
+      host_alias: "inference-host-1"
+      base_url: "https://YOUR_INFERENCE_HOST_IP/runtime/models/YOUR_MODEL_UUID/v1"
+      api_type: "openai-completions"
+      model_id: "Your-Model-Name-GGUF"
+      model_name: "My Local Model (Kamiwaza)"
+      context_window: 32768
+      max_tokens: 4096
+      reasoning: true
+      primary: true
+      tls_skip_verify: true       # Set true for self-signed certs
+
+    # ── Cloud endpoint (via Pipelock CONNECT tunnel) ─────────
+    # Budget fields (optional, per-provider override):
+    #   budget_monthly_usd:        override default cap for this provider
+    #   cost_per_1m_input_tokens:  USD per 1M input tokens  (required for cloud)
+    #   cost_per_1m_output_tokens: USD per 1M output tokens (required for cloud)
+    - provider_name: "anthropic"
+      location: "cloud"
+      host_alias: "anthropic"
+      base_url: "https://api.anthropic.com/v1"
+      api_type: "anthropic"
+      api_key: "{{ vault_anthropic_api_key | default('') }}"
+      api_key_header: "x-api-key"
+      model_id: "claude-haiku-4-5-20251001"
+      model_name: "Claude Haiku 4.5 (Anthropic)"
+      context_window: 200000
+      max_tokens: 8192
+      reasoning: false
+      primary: false
+      tls_skip_verify: false
+      cost_per_1m_input_tokens: 1.00
+      cost_per_1m_output_tokens: 5.00
+
+# ── Pipelock ─────────────────────────────────────────────────
+# Egress proxy — all outbound traffic from agent hosts is tunnelled
+# through Pipelock, which enforces domain allowlists and DLP.
+pipelock:
+  version: "latest"               # or pin a version: "0.3.5"
+  listen: "0.0.0.0:8888"
+  mode: "balanced"                # balanced | strict | audit
+  enforce: true
+
+  # Domains the agent is allowed to reach
+  api_allowlist:
+    - "*.anthropic.com"
+    - "*.openai.com"
+    - "github.com"
+    - "*.github.com"
+    - "*.githubusercontent.com"
+    - "pypi.org"
+    - "files.pythonhosted.org"
+    - "registry.npmjs.org"
+    - "*.telegram.org"
+    # Docker registries (sandbox image pulls)
+    - "*.docker.io"
+    - "*.docker.com"
+    - "ghcr.io"
+
+  # Domains that are always blocked
+  blocklist:
+    - "*.pastebin.com"
+    - "*.transfer.sh"
+    - "*.ngrok.io"
+    - "*.requestbin.com"
+    - "*.webhook.site"
+
+  # Data-loss prevention scanning
+  dlp:
+    scan_env: false               # Capability separation: Pipelock has no secrets
+    secret_patterns: true
+    entropy_analysis: true
+
+  # Detect chained tool-call patterns
+  tool_chain_detection:
+    enabled: true
+    action: "warn"
+    window_size: 20
+    window_seconds: 300
+    max_gap: 3
+
+  monitoring:
+    entropy_threshold: 4.5
+    max_url_length: 2048
+    max_requests_per_minute: 60
+
+# ── Docker / gVisor ──────────────────────────────────────────
+# Agent sandboxes run under gVisor (runsc) by default.
+docker:
+  default_runtime: "runsc"
+  no_new_privileges: true
+  log_max_size: "10m"
+  log_max_file: "3"
+
+# ── OpenClaw ─────────────────────────────────────────────────
+# Core agent platform settings.
+openclaw:
+  # openclaw-ansible repo (Phase 1 base installer)
+  ansible_repo: "https://github.com/openclaw/openclaw-ansible.git"
+  ansible_branch: "main"
+
+  # Gateway — how clients connect to the agent
+  gateway_bind: "lan"
+  gateway_port: 18789
+  gateway_auth_mode: "password"
+
+  # Sandbox defaults for agent containers
+  sandbox:
+    mode: "non-main"
+    docker_network: "bridge"
+    read_only_root: true
+    memory: "2g"
+    cpus: 2
+    pids_limit: 256
+
+  # Tools
+  tools_profile: "messaging"
+  fetch_proxy: "http://172.17.0.1:8888"  # Pipelock via Docker bridge gateway
+
+  # Agent defaults
+  max_concurrent: 4
+  subagent_max_concurrent: 8
+  compaction_mode: "safeguard"
+
+  # Control UI allowed origins (add your management IPs)
+  control_ui_origins:
+    - "https://localhost:18789"
+    - "https://127.0.0.1:18789"
+    - "https://YOUR_AGENT_HOST_IP:18789"
+    - "https://YOUR_WORKSTATION_IP:18789"
+
+  # Gateway commands that are always denied
+  deny_commands:
+    - "camera.snap"
+    - "camera.clip"
+    - "screen.record"
+    - "contacts.add"
+    - "calendar.add"
+    - "reminders.add"
+    - "sms.send"
+
+# ── LlamaFirewall ────────────────────────────────────────────
+# Inference-layer firewall: prompt injection detection, code analysis,
+# and per-provider budget enforcement.
+llamafirewall:
+  enabled: true
+  listen_host: "0.0.0.0"
+  listen_port: 9100
+  # Address containers use to reach LlamaFirewall via Docker bridge gateway
+  connect_host: "172.17.0.1"
+
+  # PromptGuard 2 — BERT classifier for prompt injection detection
+  promptguard:
+    enabled: true
+    model: "meta-llama/Prompt-Guard-2-86M"
+
+  # CodeShield — Semgrep-based code analysis
+  codeshield:
+    enabled: true
+
+  # AlignmentCheck — LLM-as-judge (expensive, optional)
+  alignmentcheck:
+    enabled: false
+
+  # Budget enforcement — tracks cumulative cloud spend per provider
+  budget:
+    enabled: true
+    default_monthly_usd: 50.00
+    state_file: "/var/lib/llamafirewall/budget.json"
+
+  venv_path: "/opt/llamafirewall/venv"
+  app_path: "/opt/llamafirewall"
+
+# ── Agent Locksmith ─────────────────────────────────────────
+# Credential-injecting reverse proxy for tool APIs.
+# Agent calls /api/{tool}/* on Locksmith; Locksmith injects credentials
+# and forwards to the upstream, routing cloud requests via Pipelock.
+locksmith:
+  enabled: true
+  version: "latest"
+  listen_host: "127.0.0.1"
+  listen_port: 9200
+  log_level: "info"
+  inbound_token: "{{ vault_locksmith_inbound_token | default('') }}"
+
+  tools:
+    - name: "github"
+      description: "GitHub REST API"
+      upstream: "https://api.github.com"
+      cloud: true
+      api_key: "{{ vault_github_token | default('') }}"
+      api_key_header: "Authorization"
+      api_key_prefix: "Bearer"
+      api_key_env: "GITHUB_TOKEN"
+      timeout_seconds: 30
+
+    - name: "tavily"
+      description: "Tavily web search"
+      upstream: "https://api.tavily.com"
+      cloud: true
+      api_key: "{{ vault_tavily_api_key | default('') }}"
+      api_key_header: "x-api-key"
+      api_key_prefix: ""
+      api_key_env: "TAVILY_API_KEY"
+      timeout_seconds: 15
+
+    - name: "firecrawl"
+      description: "Firecrawl web scraping"
+      upstream: "https://api.firecrawl.dev"
+      cloud: true
+      api_key: "{{ vault_firecrawl_api_key | default('') }}"
+      api_key_header: "Authorization"
+      api_key_prefix: "Bearer"
+      api_key_env: "FIRECRAWL_API_KEY"
+      timeout_seconds: 60
+
+# ── Systemd ──────────────────────────────────────────────────
+openclaw_binary: "/home/openclaw/.local/bin/openclaw"
+
+# ── Telemetry (OTel + Prometheus + Phoenix + Grafana) ────────
+# All services emit OTLP to the collector; the collector fans out
+# to Prometheus (metrics) and Phoenix (LLM traces).
+telemetry:
+  enabled: true
+  host: "127.0.0.1"              # Change to a remote IP to centralise
+
+  otel_collector:
+    grpc_port: 4317
+    http_port: 4318
+    version: "0.120.0"
+
+  prometheus:
+    port: 9090
+    retention: "30d"
+    scrape_interval: "15s"
+    version: "3.3.0"
+
+  phoenix:
+    port: 6006
+    prometheus_port: 9091
+    version: "latest"
+    db_dir: "/var/lib/phoenix"
+
+  grafana:
+    port: 3000
+    version: "11.6.0"
+
+  # Caddy reverse proxy — TLS termination for telemetry UIs
+  caddy:
+    version: "2.9.1"
+    grafana_port: 3443
+    prometheus_port: 9443
+    phoenix_port: 6443
+
+# ── Verification ─────────────────────────────────────────────
+# Endpoints checked by the verify role after deployment
+verify:
+  inference_endpoints:
+    - { name: "local inference", url: "https://YOUR_INFERENCE_HOST_IP/api/ping", skip_tls: true }
+    - { name: "anthropic", url: "https://api.anthropic.com/", cloud: true, requires_key: "vault_anthropic_api_key" }

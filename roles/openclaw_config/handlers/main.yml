@@ -1,0 +1,6 @@
+---
+- name: restart openclaw
+  systemd:
+    name: openclaw
+    state: restarted
+  failed_when: false

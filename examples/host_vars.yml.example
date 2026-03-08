@@ -1,0 +1,13 @@
+---
+host_ip: "YOUR_HOST_IP"
+
+openclaw_channels:
+  telegram:
+    enabled: true
+    botToken: "{{ vault_telegram_bot_token | default('') }}"
+  # slack:
+  #   enabled: true
+  #   botToken: "{{ vault_slack_bot_token | default('') }}"
+
+openclaw_gateway_token: "{{ vault_openclaw_gateway_token }}"
+openclaw_gateway_password: "{{ vault_openclaw_gateway_password }}"

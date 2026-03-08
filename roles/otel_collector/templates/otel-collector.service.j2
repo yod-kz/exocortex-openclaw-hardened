@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenTelemetry Collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/otel-collector/otelcol-contrib --config /etc/otel-collector/config.yaml
+Restart=always
+RestartSec=5
+
+User=otelcol
+Group=otelcol
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/otel-collector
+
+[Install]
+WantedBy=multi-user.target

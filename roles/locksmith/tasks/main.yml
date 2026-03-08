@@ -1,0 +1,93 @@
+---
+- name: Create locksmith system user
+  user:
+    name: locksmith
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create locksmith directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: locksmith
+    group: locksmith
+    mode: "0755"
+  loop:
+    - /etc/locksmith
+    - /var/log/locksmith
+
+- name: Check if locksmith binary exists
+  stat:
+    path: /usr/local/bin/locksmith
+  register: locksmith_bin
+
+- name: Set locksmith download URL
+  set_fact:
+    _locksmith_url: >-
+      {%- set v = locksmith.version | default('latest') -%}
+      {%- if v == 'latest' -%}
+      https://github.com/SentientSwarm/agent-locksmith/releases/latest/download/locksmith-linux-amd64
+      {%- else -%}
+      https://github.com/SentientSwarm/agent-locksmith/releases/download/{{ v }}/locksmith-linux-amd64
+      {%- endif -%}
+
+- name: Download locksmith binary
+  get_url:
+    url: "{{ _locksmith_url }}"
+    dest: /usr/local/bin/locksmith
+    mode: "0755"
+  environment:
+    https_proxy: "http://{{ pipelock.listen }}"
+  when: not locksmith_bin.stat.exists
+
+- name: Write locksmith config
+  template:
+    src: locksmith.yaml.j2
+    dest: /etc/locksmith/config.yaml
+    owner: root
+    group: locksmith
+    mode: "0640"
+  notify: restart locksmith
+
+- name: Write locksmith systemd service
+  template:
+    src: locksmith.service.j2
+    dest: /etc/systemd/system/locksmith.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart locksmith
+
+- name: Enable and start locksmith
+  systemd:
+    name: locksmith
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait for locksmith to be ready
+  uri:
+    url: "http://{{ locksmith.listen_host | default('127.0.0.1') }}:{{ locksmith.listen_port | default(9200) }}/health"
+    method: GET
+    status_code: 200
+  register: locksmith_health
+  retries: 5
+  delay: 2
+  until: locksmith_health.status == 200
+
+- name: Verify locksmith tool discovery
+  uri:
+    url: "http://{{ locksmith.listen_host | default('127.0.0.1') }}:{{ locksmith.listen_port | default(9200) }}/tools"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ locksmith.inbound_token }}"
+    status_code: 200
+    return_content: true
+  register: locksmith_tools
+  when: locksmith.inbound_token | default('') != ''
+
+- name: Report active tools
+  debug:
+    msg: "Locksmith active tools: {{ (locksmith_tools.json.tools | map(attribute='name') | list) if locksmith_tools.json is defined else 'discovery skipped (no inbound token)' }}"
+  when: locksmith_tools is defined and locksmith_tools is not skipped

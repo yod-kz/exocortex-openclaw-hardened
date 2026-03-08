@@ -1,0 +1,26 @@
+[Unit]
+Description=Prometheus Monitoring
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/prometheus/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/var/lib/prometheus \
+  --storage.tsdb.retention.time={{ telemetry.prometheus.retention }} \
+  --web.listen-address={{ telemetry.host }}:{{ telemetry.prometheus.port }} \
+  --web.enable-lifecycle
+Restart=always
+RestartSec=5
+
+User=prometheus
+Group=prometheus
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/prometheus
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

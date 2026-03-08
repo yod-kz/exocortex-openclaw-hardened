@@ -1,0 +1,97 @@
+---
+# ═════════════════════════════════════════════════════════════
+# OpenClaw Secure Deployment — Main Playbook
+#
+# Usage:
+#   ansible-playbook playbook.yml --ask-become-pass
+#   ansible-playbook playbook.yml --ask-become-pass --tags phase2
+#   ansible-playbook playbook.yml --ask-become-pass --tags verify
+#
+# Phases:
+#   phase1: openclaw-ansible base (run locally on host — see README)
+#   phase2: docker_hardening, pipelock, nftables, llamafirewall
+#   phase3: openclaw_config, openclaw_service
+#   verify: posture verification
+# ═════════════════════════════════════════════════════════════
+- name: Secure OpenClaw Deployment
+  hosts: agent_hosts
+  become: true
+
+  pre_tasks:
+    - name: Verify Phase 1 completed (openclaw user exists)
+      command: id openclaw
+      changed_when: false
+      tags: [always]
+
+    - name: Verify Docker is running
+      systemd:
+        name: docker
+        state: started
+      tags: [always]
+
+  roles:
+    # ── Phase 2: Hardening ───────────────────────────────────
+    - role: docker_hardening
+      tags: [phase2, docker]
+
+    - role: pipelock
+      tags: [phase2, pipelock]
+
+    - role: locksmith
+      tags: [phase2, locksmith]
+      when: locksmith.enabled | default(false)
+
+    - role: nftables
+      tags: [phase2, nftables]
+
+    - role: llamafirewall
+      tags: [phase2, llamafirewall]
+      when: llamafirewall.enabled | default(false)
+
+    # ── Phase 2b: Telemetry Stack ─────────────────────────────
+    - role: otel_collector
+      tags: [phase2, telemetry, otel]
+      when: telemetry.enabled | default(false)
+
+    - role: phoenix
+      tags: [phase2, telemetry, phoenix]
+      when: telemetry.enabled | default(false)
+
+    - role: prometheus
+      tags: [phase2, telemetry, prometheus]
+      when: telemetry.enabled | default(false)
+
+    - role: grafana
+      tags: [phase2, telemetry, grafana]
+      when: telemetry.enabled | default(false)
+
+    - role: caddy
+      tags: [phase2, telemetry, caddy]
+      when: telemetry.enabled | default(false)
+
+    # ── Phase 3: OpenClaw Configuration ──────────────────────
+    - role: openclaw_onboard
+      tags: [phase3, onboard]
+
+    - role: openclaw_config
+      tags: [phase3, config]
+
+    - role: openclaw_service
+      tags: [phase3, service]
+
+    - role: agent_state
+      tags: [phase3, agents]
+      when: openclaw_agents | default([]) | length > 0
+
+  # Flush pending handlers (e.g. service restarts) before verification
+  post_tasks:
+    - meta: flush_handlers
+      tags: [always]
+
+  # Verification runs as a separate play so handler ordering is guaranteed
+- name: Verify Host Posture
+  hosts: agent_hosts
+  become: true
+  roles:
+    - role: verify
+      tags: [verify]

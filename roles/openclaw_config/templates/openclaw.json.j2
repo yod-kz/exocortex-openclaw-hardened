@@ -1,0 +1,170 @@
+{# Filter endpoints: LAN always active, cloud only if key is configured #}
+{% set _eps = [] %}
+{% for ep in inference.endpoints %}
+{%   if ep.api_key | default('not-required') != '' %}
+{%     set _ = _eps.append(ep) %}
+{%   endif %}
+{% endfor %}
+{# Filter channels: only those with a valid bot token #}
+{% set _chans = {} %}
+{% for name, cfg in openclaw_channels.items() %}
+{%   if cfg.botToken | default('') != '' %}
+{%     set _ = _chans.update({name: cfg}) %}
+{%   endif %}
+{% endfor %}
+{
+  "meta": {
+    "lastTouchedVersion": "ansible-managed",
+    "lastTouchedAt": "{{ ansible_facts['date_time']['iso8601'] }}"
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+{% for ep in _eps %}
+      "{{ ep.provider_name }}": {
+{% if llamafirewall.enabled | default(false) %}
+        "baseUrl": "http://{{ llamafirewall.connect_host | default(llamafirewall.listen_host) }}:{{ llamafirewall.listen_port }}/{{ ep.provider_name }}/v1",
+{% else %}
+        "baseUrl": "{{ ep.base_url }}",
+{% endif %}
+        "apiKey": "{{ ep.api_key | default('not-required') }}",
+        "api": "{{ ep.api_type }}",
+        "models": [
+          {
+            "id": "{{ ep.model_id }}",
+            "name": "{{ ep.model_name }}",
+            "reasoning": {{ ep.reasoning | to_json }},
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": {{ ep.context_window }},
+            "maxTokens": {{ ep.max_tokens }}
+          }
+        ]
+      }{{ "," if not loop.last }}
+{% endfor %}
+    }
+  },
+  "agents": {
+    "defaults": {
+{% set primary = _eps | selectattr('primary', 'equalto', true) | first %}
+      "model": {
+        "primary": "{{ primary.provider_name }}/{{ primary.model_id }}"
+      },
+      "models": {
+{% for ep in _eps %}
+        "{{ ep.provider_name }}/{{ ep.model_id }}": {
+          "alias": "{{ ep.model_id | lower | replace('_','-') | replace('/','-') }}"
+        }{{ "," if not loop.last }}
+{% endfor %}
+      },
+      "workspace": "/home/openclaw/.openclaw/workspace",
+      "compaction": {
+        "mode": "{{ openclaw.compaction_mode }}"
+      },
+      "maxConcurrent": {{ openclaw.max_concurrent }},
+      "subagents": {
+        "maxConcurrent": {{ openclaw.subagent_max_concurrent }}
+      },
+      "sandbox": {
+        "mode": "{{ openclaw.sandbox.mode }}",
+        "docker": {
+          "network": "{{ openclaw.sandbox.docker_network }}",
+          "readOnlyRoot": {{ openclaw.sandbox.read_only_root | to_json }},
+          "memory": "{{ openclaw.sandbox.memory }}",
+          "cpus": {{ openclaw.sandbox.cpus }},
+          "pidsLimit": {{ openclaw.sandbox.pids_limit }}
+        }
+      }
+    }{% if openclaw_agents | default([]) | length > 0 %},
+    "list": [
+{% for agent in openclaw_agents %}
+      {
+        "id": "{{ agent.id }}",
+        "name": "{{ agent.name | default(agent.id) }}",
+        "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/agents/{{ agent.id }}/workspace",
+        "skills": {{ agent.skills | default([]) | to_json }},
+        "memorySearch": {
+          "enabled": {{ agent.memory_search | default(false) | to_json }},
+          "sources": ["memory", "sessions"],
+          "extraPaths": [
+            "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/shared/knowledge"
+          ]
+        }
+      }{{ "," if not loop.last }}
+{% endfor %}
+    ]
+{% endif %}
+  },
+  "tools": {
+    "profile": "{{ openclaw.tools_profile }}"
+  },
+  "env": {
+    "HTTP_PROXY": "{{ openclaw.fetch_proxy }}",
+    "HTTPS_PROXY": "{{ openclaw.fetch_proxy }}",
+    "NO_PROXY": "localhost,127.0.0.1,172.17.0.1,{{ network.allowed_lan_ips | map(attribute='ip') | join(',') }}{% if openclaw.no_proxy_extra is defined %},{{ openclaw.no_proxy_extra | join(',') }}{% endif %}"
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "channels": {{ _chans | to_nice_json }},
+  "gateway": {
+    "port": {{ openclaw.gateway_port }},
+    "mode": "local",
+    "bind": "{{ openclaw.gateway_bind }}",
+    "auth": {
+      "mode": "{{ openclaw.gateway_auth_mode }}",
+      "token": "{{ openclaw_gateway_token }}",
+      "password": "{{ openclaw_gateway_password }}"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "nodes": {
+      "denyCommands": {{ openclaw.deny_commands | to_json }}
+    },
+    "controlUi": {
+      "enabled": true,
+      "root": "/home/openclaw/.openclaw/control-ui",
+      "allowedOrigins": {{ openclaw.control_ui_origins | to_json }}
+    },
+    "tls": {
+      "enabled": true
+    },
+    "http": {
+      "securityHeaders": {
+        "strictTransportSecurity": "max-age=31536000; includeSubDomains"
+      }
+    }
+  },
+{% if telemetry.enabled | default(false) %}
+  "diagnostics": {
+    "enabled": true,
+    "otel": {
+      "enabled": true,
+      "endpoint": "http://{{ telemetry.host }}:{{ telemetry.otel_collector.http_port }}",
+      "serviceName": "openclaw-gateway",
+      "traces": true,
+      "metrics": true,
+      "sampleRate": 1.0,
+      "flushIntervalMs": 5000
+    }
+  },
+{% endif %}
+  "plugins": {
+    "entries": {
+{% for channel in _chans.keys() %}
+      "{{ channel }}": { "enabled": true }{{ "," if not loop.last }}
+{% endfor %}
+    }
+  }
+}

@@ -1,0 +1,31 @@
+---
+- name: Ensure llamafirewall user exists (needed for nftables skuid rule)
+  user:
+    name: llamafirewall
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+  when: llamafirewall.enabled | default(false)
+
+- name: Disable UFW
+  systemd:
+    name: ufw
+    enabled: false
+    state: stopped
+  failed_when: false
+
+- name: Write nftables config
+  template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0644"
+    backup: true
+
+- name: Enable nftables service
+  systemd:
+    name: nftables
+    enabled: true
+
+- name: Load nftables ruleset
+  command: nft -f /etc/nftables.conf
+  changed_when: true

@@ -1,0 +1,109 @@
+---
+# Grafana — dashboards for Prometheus metrics and Phoenix traces
+
+- name: Install prerequisite packages
+  apt:
+    name:
+      - apt-transport-https
+      - software-properties-common
+    state: present
+
+- name: Ensure keyrings directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Allow temporary egress for Grafana setup
+  command: >
+    nft insert rule inet openclaw output
+    ip daddr != { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 }
+    tcp dport { 80, 443 }
+    accept
+    comment "temp-apt-grafana"
+
+- name: Add Grafana GPG key
+  get_url:
+    url: https://apt.grafana.com/gpg.key
+    dest: /etc/apt/keyrings/grafana.asc
+    mode: "0644"
+    timeout: 30
+
+- name: Add Grafana repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main"
+    state: present
+    filename: grafana
+
+- name: Install Grafana
+  apt:
+    name: "grafana={{ telemetry.grafana.version }}*"
+    state: present
+    update_cache: true
+
+- name: Remove temporary egress rule
+  shell: |
+    HANDLE=$(nft -a list chain inet openclaw output | grep 'temp-apt-grafana' | awk '{print $NF}')
+    [ -n "$HANDLE" ] && nft delete rule inet openclaw output handle "$HANDLE"
+  changed_when: true
+
+- name: Configure Grafana listen address
+  lineinfile:
+    path: /etc/grafana/grafana.ini
+    regexp: "^;?http_addr\\s*="
+    line: "http_addr = {{ telemetry.host }}"
+    insertafter: "\\[server\\]"
+  notify: restart grafana
+
+- name: Configure Grafana port
+  lineinfile:
+    path: /etc/grafana/grafana.ini
+    regexp: "^;?http_port\\s*="
+    line: "http_port = {{ telemetry.grafana.port }}"
+    insertafter: "\\[server\\]"
+  notify: restart grafana
+
+- name: Write datasource provisioning
+  template:
+    src: datasources.yml.j2
+    dest: /etc/grafana/provisioning/datasources/openclaw.yml
+    owner: grafana
+    group: grafana
+    mode: "0640"
+  notify: restart grafana
+
+- name: Create dashboard directory
+  file:
+    path: /var/lib/grafana/dashboards
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: "0755"
+
+- name: Write dashboard provisioning config
+  template:
+    src: dashboards.yml.j2
+    dest: /etc/grafana/provisioning/dashboards/openclaw.yml
+    owner: grafana
+    group: grafana
+    mode: "0640"
+  notify: restart grafana
+
+- name: Deploy dashboard JSON files
+  copy:
+    src: "{{ item }}"
+    dest: "/var/lib/grafana/dashboards/{{ item | basename }}"
+    owner: grafana
+    group: grafana
+    mode: "0640"
+  loop:
+    - ai-gateway.json
+    - telemetry-infra.json
+  notify: restart grafana
+
+- name: Enable and start Grafana
+  systemd:
+    name: grafana-server
+    enabled: true
+    state: started
+    daemon_reload: true

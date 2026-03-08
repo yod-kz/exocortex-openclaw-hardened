@@ -1,0 +1,6 @@
+---
+docker:
+  default_runtime: "runsc"
+  no_new_privileges: true
+  log_max_size: "10m"
+  log_max_file: "3"

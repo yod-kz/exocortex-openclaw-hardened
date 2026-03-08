@@ -1,0 +1,97 @@
+---
+# LlamaFirewall runs as an OpenAI-compatible proxy between
+# OpenClaw and the real inference endpoint. It scans all
+# inputs/outputs with PromptGuard 2 and CodeShield.
+
+- name: Install system dependencies
+  apt:
+    name:
+      - python3-venv
+      - python3-pip
+    state: present
+
+- name: Create llamafirewall directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ llamafirewall.app_path }}"
+    - "{{ llamafirewall.venv_path }}"
+    - /var/log/llamafirewall
+    - "{{ llamafirewall.budget.state_file | dirname }}"
+
+- name: Create llamafirewall system user
+  user:
+    name: llamafirewall
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+    home: "{{ llamafirewall.app_path }}"
+
+- name: Create Python virtual environment
+  command: python3 -m venv {{ llamafirewall.venv_path }}
+  args:
+    creates: "{{ llamafirewall.venv_path }}/bin/python"
+
+- name: Allow temporary egress for pip install
+  command: >
+    nft insert rule inet openclaw output
+    ip daddr != { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 }
+    tcp dport { 80, 443 }
+    accept
+    comment "temp-pip-install"
+
+- name: Install LlamaFirewall and dependencies
+  pip:
+    name:
+      - llamafirewall
+      - fastapi
+      - uvicorn
+      - httpx
+      - opentelemetry-api
+      - opentelemetry-sdk
+      - opentelemetry-exporter-otlp-proto-http
+    virtualenv: "{{ llamafirewall.venv_path }}"
+    state: present
+
+- name: Remove temporary egress rule
+  shell: |
+    HANDLE=$(nft -a list chain inet openclaw output | grep 'temp-pip-install' | awk '{print $NF}')
+    [ -n "$HANDLE" ] && nft delete rule inet openclaw output handle "$HANDLE"
+  changed_when: true
+
+- name: Write LlamaFirewall proxy application
+  template:
+    src: llamafirewall_proxy.py.j2
+    dest: "{{ llamafirewall.app_path }}/proxy.py"
+    mode: "0644"
+  notify: restart llamafirewall
+
+- name: Write LlamaFirewall systemd service
+  template:
+    src: llamafirewall.service.j2
+    dest: /etc/systemd/system/llamafirewall.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart llamafirewall
+
+- name: Set ownership
+  file:
+    path: "{{ item }}"
+    owner: llamafirewall
+    group: llamafirewall
+    recurse: true
+  loop:
+    - "{{ llamafirewall.app_path }}"
+    - "{{ llamafirewall.venv_path }}"
+    - /var/log/llamafirewall
+    - "{{ llamafirewall.budget.state_file | dirname }}"
+
+- name: Enable and start llamafirewall
+  systemd:
+    name: llamafirewall
+    enabled: true
+    state: started
+    daemon_reload: true

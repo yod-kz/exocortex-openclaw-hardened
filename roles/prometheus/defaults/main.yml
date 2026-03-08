@@ -1,0 +1,6 @@
+---
+telemetry_prometheus_defaults:
+  port: 9090
+  retention: "30d"
+  scrape_interval: "15s"
+  version: "3.3.0"

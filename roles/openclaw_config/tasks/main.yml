@@ -1,0 +1,64 @@
+---
+# Writes openclaw.json with security hardening settings.
+# Runs after openclaw_onboard which ensures openclaw.json exists.
+
+# ── Control UI assets (workaround) ─────────────────────────────
+# pnpm hardlinks cause nlink > 1 on installed files. OpenClaw's gateway
+# rejects nlink > 1 in openBoundaryFileSync (security measure for
+# user-uploaded content, but incorrectly applied to bundled assets).
+#
+# Upstream bug: https://github.com/openclaw/openclaw/issues/28404
+# Also: #34189, #4855, #6679
+#
+# Workaround: copy control-ui assets to break hardlinks.
+# Also set pnpm package-import-method=copy so future updates
+# produce nlink=1 files natively.
+#
+# TODO: Remove this block when upstream fixes resolveSafeControlUiFile
+#       to pass rejectHardlinks: false for bundled assets.
+
+- name: Locate openclaw package directory
+  shell: |
+    grep -oP 'NODE_PATH="\K[^"]+' {{ openclaw_binary }} | tr ':' '\n' | grep '/openclaw/node_modules$' | sed 's|/node_modules$||' | head -1
+  register: openclaw_pkg_dir
+  changed_when: false
+  failed_when: openclaw_pkg_dir.stdout | length == 0
+
+- name: Copy control-ui assets if hardlinked
+  shell: |
+    src="{{ openclaw_pkg_dir.stdout | trim }}/dist/control-ui"
+    dest="/home/openclaw/.openclaw/control-ui"
+    if [ ! -d "$src" ]; then
+      echo "SKIP: source not found"
+      exit 0
+    fi
+    # Check if index.html has nlink > 1 (pnpm hardlink)
+    nlink=$(stat -c '%h' "$src/index.html" 2>/dev/null || echo 1)
+    if [ "$nlink" -le 1 ] && [ -f "$dest/index.html" ]; then
+      echo "SKIP: assets already have nlink=1"
+      exit 0
+    fi
+    rm -rf "$dest.tmp"
+    cp -r "$src" "$dest.tmp"
+    chown -R openclaw:openclaw "$dest.tmp"
+    rm -rf "$dest"
+    mv "$dest.tmp" "$dest"
+  register: control_ui_copy
+  changed_when: "'SKIP' not in control_ui_copy.stdout"
+
+- name: Backup existing openclaw.json
+  copy:
+    src: /home/openclaw/.openclaw/openclaw.json
+    dest: "/home/openclaw/.openclaw/openclaw.json.bak.{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
+    remote_src: true
+    owner: openclaw
+    group: openclaw
+
+- name: Write hardened openclaw.json
+  template:
+    src: openclaw.json.j2
+    dest: /home/openclaw/.openclaw/openclaw.json
+    owner: openclaw
+    group: openclaw
+    mode: "0600"
+  notify: restart openclaw

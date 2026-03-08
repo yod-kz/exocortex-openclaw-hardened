@@ -1,0 +1,46 @@
+---
+# Creates a system-level systemd service for OpenClaw.
+# This replaces the user-level service that openclaw onboard
+# tries (and fails) to create when systemctl --user isn't available.
+
+- name: Detect openclaw binary path
+  shell: |
+    for p in /home/openclaw/.local/bin/openclaw /home/linuxbrew/.linuxbrew/bin/openclaw /usr/local/bin/openclaw; do
+      [ -x "$p" ] && echo "$p" && exit 0
+    done
+    exit 1
+  register: openclaw_which
+  changed_when: false
+  failed_when: false
+
+- name: Use detected or configured binary path
+  set_fact:
+    final_openclaw_binary: "{{ (openclaw_which.stdout | trim) if openclaw_which.rc == 0 else openclaw_binary }}"
+
+- name: Verify openclaw binary exists
+  stat:
+    path: "{{ final_openclaw_binary }}"
+  register: binary_check
+
+- name: Fail if openclaw binary not found
+  fail:
+    msg: >
+      OpenClaw binary not found at {{ final_openclaw_binary }}.
+      Run 'openclaw onboard' as the openclaw user first.
+  when: not binary_check.stat.exists
+
+- name: Write system-level openclaw service
+  template:
+    src: openclaw.service.j2
+    dest: /etc/systemd/system/openclaw.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart openclaw
+
+- name: Enable and start openclaw
+  systemd:
+    name: openclaw
+    enabled: true
+    state: started
+    daemon_reload: true

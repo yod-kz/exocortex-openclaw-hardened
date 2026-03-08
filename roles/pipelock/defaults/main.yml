@@ -1,0 +1,48 @@
+---
+pipelock:
+  version: "latest"
+  listen: "0.0.0.0:8888"
+  mode: "balanced"
+  enforce: true
+
+  api_allowlist:
+    - "*.anthropic.com"
+    - "*.openai.com"
+    - "api.together.xyz"
+    - "github.com"
+    - "*.github.com"
+    - "*.githubusercontent.com"
+    - "pypi.org"
+    - "files.pythonhosted.org"
+    - "registry.npmjs.org"
+    - "*.docker.io"
+    - "*.docker.com"
+    - "production.cloudflare.docker.com"
+    - "ghcr.io"
+
+  # Site config can add entries via pipelock.api_allowlist_extra
+  api_allowlist_extra: []
+
+  blocklist:
+    - "*.pastebin.com"
+    - "*.transfer.sh"
+    - "*.ngrok.io"
+    - "*.requestbin.com"
+    - "*.webhook.site"
+
+  dlp:
+    scan_env: false
+    secret_patterns: true
+    entropy_analysis: true
+
+  tool_chain_detection:
+    enabled: true
+    action: "warn"
+    window_size: 20
+    window_seconds: 300
+    max_gap: 3
+
+  monitoring:
+    entropy_threshold: 4.5
+    max_url_length: 2048
+    max_requests_per_minute: 60

@@ -1,0 +1,9 @@
+---
+- name: reload systemd
+  systemd:
+    daemon_reload: true
+
+- name: restart phoenix
+  systemd:
+    name: phoenix
+    state: restarted

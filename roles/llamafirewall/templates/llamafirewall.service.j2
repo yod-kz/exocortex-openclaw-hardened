@@ -1,0 +1,31 @@
+[Unit]
+Description=LlamaFirewall OpenAI Proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{ llamafirewall.venv_path }}/bin/python {{ llamafirewall.app_path }}/proxy.py
+Restart=always
+RestartSec=5
+WorkingDirectory={{ llamafirewall.app_path }}
+
+User=llamafirewall
+Group=llamafirewall
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/llamafirewall {{ llamafirewall.app_path }}
+PrivateTmp=true
+
+# LlamaFirewall needs to download PromptGuard model on first run
+# Allow network and write to HuggingFace cache
+Environment=HF_HOME={{ llamafirewall.app_path }}/.cache/huggingface
+Environment=TRANSFORMERS_CACHE={{ llamafirewall.app_path }}/.cache/huggingface
+{% if telemetry.enabled | default(false) %}
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://{{ telemetry.host }}:{{ telemetry.otel_collector.http_port }}
+Environment=OTEL_SERVICE_NAME=llamafirewall-proxy
+{% endif %}
+
+[Install]
+WantedBy=multi-user.target

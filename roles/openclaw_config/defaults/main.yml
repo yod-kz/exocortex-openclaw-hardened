@@ -1,0 +1,34 @@
+---
+openclaw:
+  gateway_bind: "lan"
+  gateway_port: 18789
+  gateway_auth_mode: "password"
+
+  sandbox:
+    mode: "non-main"
+    docker_network: "bridge"
+    read_only_root: true
+    memory: "2g"
+    cpus: 2
+    pids_limit: 256
+
+  tools_profile: "messaging"
+  fetch_proxy: "http://172.17.0.1:8888"
+
+  max_concurrent: 4
+  subagent_max_concurrent: 8
+  compaction_mode: "safeguard"
+
+  deny_commands:
+    - "camera.snap"
+    - "camera.clip"
+    - "screen.record"
+    - "contacts.add"
+    - "calendar.add"
+    - "reminders.add"
+    - "sms.send"
+
+openclaw_binary: "/home/openclaw/.local/bin/openclaw"
+
+# Agent definitions — empty by default, defined in site config
+openclaw_agents: []

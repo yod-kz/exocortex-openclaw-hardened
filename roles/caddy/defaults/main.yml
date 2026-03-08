@@ -1,0 +1,6 @@
+---
+telemetry_caddy_defaults:
+  version: "2.9.1"
+  grafana_port: 3443
+  prometheus_port: 9443
+  phoenix_port: 6443

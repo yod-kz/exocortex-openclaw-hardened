@@ -1,0 +1,31 @@
+---
+- name: Deploy verification script
+  template:
+    src: verify-posture.sh.j2
+    dest: /usr/local/bin/verify-posture.sh
+    mode: "0755"
+
+- name: Wait for openclaw gateway to be ready
+  shell: ss -tlnp | grep -q ':{{ openclaw.gateway_port }}'
+  register: gw_ready
+  retries: 12
+  delay: 5
+  until: gw_ready.rc == 0
+  failed_when: false
+  changed_when: false
+
+- name: Run verification
+  command: /usr/local/bin/verify-posture.sh
+  register: verify_result
+  changed_when: false
+  failed_when: false
+
+- name: Show verification output
+  debug:
+    msg: "{{ verify_result.stdout_lines }}"
+
+- name: Fail if non-compliant
+  fail:
+    msg: "Host posture verification failed. Review output above."
+  when: "'NON-COMPLIANT' in verify_result.stdout"
+  ignore_errors: "{{ verify_ignore_failures | default(false) }}"

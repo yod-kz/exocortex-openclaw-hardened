@@ -1,0 +1,132 @@
+---
+# Bootstrap: generate vault secrets for a new deployment.
+# Run once before the main playbook:
+#   ansible-playbook bootstrap-vault.yml --ask-vault-pass
+#
+# Idempotent — skips if vault.yml already exists.
+
+- name: Bootstrap vault secrets
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    vault_file: "{{ playbook_dir }}/group_vars/agent_hosts/vault.yml"
+
+  tasks:
+    - name: Check if vault file exists
+      stat:
+        path: "{{ vault_file }}"
+      register: vault_check
+
+    - name: Skip if vault already exists
+      debug:
+        msg: "Vault file already exists at {{ vault_file }}. Delete it first to regenerate."
+      when: vault_check.stat.exists
+
+    - name: Generate secrets
+      when: not vault_check.stat.exists
+      block:
+        - name: Generate gateway token
+          command: openssl rand -hex 24
+          register: gen_token
+          changed_when: false
+
+        - name: Generate gateway password
+          command: openssl rand -base64 16
+          register: gen_password
+          changed_when: false
+
+        - name: Prompt for Telegram bot token
+          pause:
+            prompt: "Enter Telegram bot token (from @BotFather, or press Enter to skip)"
+          register: telegram_prompt
+
+        - name: Set Telegram token
+          set_fact:
+            telegram_token: "{{ telegram_prompt.user_input | default('', true) }}"
+
+        - name: Prompt for Slack bot token
+          pause:
+            prompt: "Enter Slack bot token (xoxb-..., or press Enter to skip)"
+          register: slack_prompt
+
+        - name: Set Slack token
+          set_fact:
+            slack_token: "{{ slack_prompt.user_input | default('', true) }}"
+
+        - name: Prompt for Anthropic API key
+          pause:
+            prompt: "Enter Anthropic API key (sk-ant-..., or press Enter to skip)"
+          register: anthropic_prompt
+
+        - name: Set Anthropic key
+          set_fact:
+            anthropic_key: "{{ anthropic_prompt.user_input | default('', true) }}"
+
+        - name: Prompt for OpenAI API key
+          pause:
+            prompt: "Enter OpenAI API key (sk-..., or press Enter to skip)"
+          register: openai_prompt
+
+        - name: Set OpenAI key
+          set_fact:
+            openai_key: "{{ openai_prompt.user_input | default('', true) }}"
+
+        - name: Prompt for GitHub token
+          pause:
+            prompt: "Enter GitHub personal access token (ghp_..., or press Enter to skip)"
+          register: github_prompt
+
+        - name: Set GitHub token
+          set_fact:
+            github_token: "{{ github_prompt.user_input | default('', true) }}"
+
+        - name: Prompt for Tavily API key
+          pause:
+            prompt: "Enter Tavily API key (tvly-..., or press Enter to skip)"
+          register: tavily_prompt
+
+        - name: Set Tavily key
+          set_fact:
+            tavily_key: "{{ tavily_prompt.user_input | default('', true) }}"
+
+        - name: Prompt for Firecrawl API key
+          pause:
+            prompt: "Enter Firecrawl API key (fc-..., or press Enter to skip)"
+          register: firecrawl_prompt
+
+        - name: Set Firecrawl key
+          set_fact:
+            firecrawl_key: "{{ firecrawl_prompt.user_input | default('', true) }}"
+
+        - name: Generate Locksmith inbound token
+          command: openssl rand -hex 24
+          register: gen_locksmith_token
+          changed_when: false
+
+        - name: Write plaintext vault file
+          copy:
+            content: |
+              ---
+              vault_telegram_bot_token: "{{ telegram_token }}"
+              vault_slack_bot_token: "{{ slack_token }}"
+              vault_anthropic_api_key: "{{ anthropic_key }}"
+              vault_openai_api_key: "{{ openai_key }}"
+              vault_github_token: "{{ github_token }}"
+              vault_tavily_api_key: "{{ tavily_key }}"
+              vault_firecrawl_api_key: "{{ firecrawl_key }}"
+              vault_locksmith_inbound_token: "{{ gen_locksmith_token.stdout | trim }}"
+              vault_openclaw_gateway_token: "{{ gen_token.stdout | trim }}"
+              vault_openclaw_gateway_password: "{{ gen_password.stdout | trim }}"
+            dest: "{{ vault_file }}"
+            mode: "0600"
+
+        - name: Encrypt vault file
+          command: ansible-vault encrypt {{ vault_file }}
+
+        - name: Show generated credentials
+          debug:
+            msg:
+              - "Vault created and encrypted: {{ vault_file }}"
+              - "Save these values somewhere safe — they're now encrypted in the vault."

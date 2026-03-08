@@ -1,0 +1,57 @@
+---
+# Runs openclaw onboard non-interactively if openclaw.json does not exist.
+# The openclaw_config role overwrites the generated config with our hardened version.
+
+# Workaround for https://github.com/openclaw/openclaw/issues/28404
+# pnpm hardlinks (nlink > 1) break control-ui asset serving.
+# Setting copy mode ensures future updates produce nlink=1 files.
+# TODO: Remove when upstream fixes resolveSafeControlUiFile.
+- name: Set pnpm package-import-method to copy
+  shell: |
+    sudo -i -u openclaw pnpm config get package-import-method 2>/dev/null
+  register: pnpm_import_method
+  changed_when: false
+  failed_when: false
+
+- name: Configure pnpm copy mode (avoid hardlinks)
+  shell: |
+    sudo -i -u openclaw pnpm config set package-import-method copy
+  when: pnpm_import_method.stdout | default('') != 'copy'
+
+- name: Detect openclaw binary path
+  shell: |
+    for p in /home/openclaw/.local/bin/openclaw /home/linuxbrew/.linuxbrew/bin/openclaw /usr/local/bin/openclaw; do
+      [ -x "$p" ] && echo "$p" && exit 0
+    done
+    exit 1
+  register: openclaw_which
+  changed_when: false
+  failed_when: openclaw_which.rc != 0
+
+- name: Check if openclaw.json exists
+  stat:
+    path: /home/openclaw/.openclaw/openclaw.json
+  register: openclaw_json
+
+- name: Run openclaw onboard (non-interactive)
+  shell: |
+    su -s /bin/bash openclaw -c '{{ openclaw_which.stdout | trim }} onboard \
+      --non-interactive \
+      --accept-risk \
+      --flow manual \
+      --mode local \
+      --auth-choice custom-api-key \
+      --custom-base-url "http://127.0.0.1:{{ llamafirewall.listen_port }}/{{ (inference.endpoints | selectattr("primary", "equalto", true) | first).provider_name }}/v1" \
+      --custom-model-id "{{ (inference.endpoints | selectattr("primary", "equalto", true) | first).model_id }}" \
+      --custom-compatibility openai \
+      --gateway-auth password \
+      --gateway-password "{{ openclaw_gateway_password }}" \
+      --gateway-token "{{ openclaw_gateway_token }}" \
+      --gateway-bind {{ openclaw.gateway_bind }} \
+      --gateway-port {{ openclaw.gateway_port }} \
+      --skip-channels \
+      --skip-skills \
+      --no-install-daemon \
+      --skip-health \
+      --workspace /home/openclaw/.openclaw/workspace'
+  when: not openclaw_json.stat.exists

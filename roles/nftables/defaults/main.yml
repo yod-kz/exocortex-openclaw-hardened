@@ -1,0 +1,9 @@
+---
+# network.docker_cidr and network.inference_ports have defaults here.
+# network.gateway_ip, allowed_lan_ips, mgmt_cidrs are REQUIRED in site config.
+network_defaults:
+  docker_cidr: "172.16.0.0/12"
+  inference_ports:
+    - 443
+    - 11434
+    - 8091

@@ -1,0 +1,94 @@
+---
+# Caddy — TLS reverse proxy for telemetry UIs
+
+- name: Create caddy user
+  user:
+    name: caddy
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create caddy directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: caddy
+    group: caddy
+    mode: "0755"
+  loop:
+    - /etc/caddy
+    - /var/lib/caddy
+    - /var/log/caddy
+
+- name: Detect architecture
+  set_fact:
+    caddy_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+
+- name: Allow temporary egress for Caddy download
+  command: >
+    nft insert rule inet openclaw output
+    ip daddr != { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 }
+    tcp dport { 80, 443 }
+    accept
+    comment "temp-caddy-download"
+
+- name: Download Caddy
+  get_url:
+    url: "https://github.com/caddyserver/caddy/releases/download/v{{ telemetry.caddy.version }}/caddy_{{ telemetry.caddy.version }}_linux_{{ caddy_arch }}.tar.gz"
+    dest: /tmp/caddy.tar.gz
+    mode: "0644"
+    timeout: 60
+
+- name: Remove temporary egress rule
+  shell: |
+    HANDLE=$(nft -a list chain inet openclaw output | grep 'temp-caddy-download' | awk '{print $NF}')
+    [ -n "$HANDLE" ] && nft delete rule inet openclaw output handle "$HANDLE"
+  changed_when: true
+
+- name: Create extract directory
+  file:
+    path: /tmp/caddy-extract
+    state: directory
+    mode: "0755"
+
+- name: Extract Caddy binary
+  unarchive:
+    src: /tmp/caddy.tar.gz
+    dest: /tmp/caddy-extract
+    remote_src: true
+  args:
+    creates: /usr/bin/caddy
+
+- name: Install Caddy binary
+  copy:
+    src: /tmp/caddy-extract/caddy
+    dest: /usr/bin/caddy
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write Caddyfile
+  template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    owner: caddy
+    group: caddy
+    mode: "0644"
+  notify: restart caddy
+
+- name: Write systemd service
+  template:
+    src: caddy.service.j2
+    dest: /etc/systemd/system/caddy.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart caddy
+
+- name: Enable and start Caddy
+  systemd:
+    name: caddy
+    enabled: true
+    state: started
+    daemon_reload: true

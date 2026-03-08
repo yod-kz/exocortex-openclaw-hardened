@@ -1,0 +1,32 @@
+[Unit]
+Description=Arize Phoenix LLM Observability
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/phoenix/venv/bin/python -m phoenix.server.main serve
+Restart=always
+RestartSec=5
+
+User=phoenix
+Group=phoenix
+
+# Phoenix configuration via environment
+Environment=PHOENIX_HOST={{ telemetry.host }}
+Environment=PHOENIX_PORT={{ telemetry.phoenix.port }}
+Environment=PHOENIX_GRPC_PORT=0
+Environment=PHOENIX_WORKING_DIR={{ telemetry.phoenix.db_dir }}
+# Phoenix hardcodes Prometheus on :9090 (not configurable),
+# which conflicts with our Prometheus instance. Disable it —
+# LLM metrics flow through OTel Collector instead.
+Environment=PHOENIX_ENABLE_PROMETHEUS=false
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ telemetry.phoenix.db_dir }} /opt/phoenix
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

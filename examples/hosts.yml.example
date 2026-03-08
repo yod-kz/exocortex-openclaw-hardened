@@ -1,0 +1,7 @@
+all:
+  children:
+    agent_hosts:
+      hosts:
+        my-agent-host:
+          ansible_host: YOUR_AGENT_HOST_IP
+          ansible_user: YOUR_SSH_USER

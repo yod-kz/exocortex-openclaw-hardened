@@ -1,0 +1,92 @@
+---
+- name: Collect unique agent state repos
+  set_fact:
+    _agent_repos: "{{ openclaw_agents | selectattr('state_repo', 'defined') | map(attribute='state_repo') | unique | list }}"
+
+- name: Create state-repos directory
+  file:
+    path: "{{ openclaw_data_dir }}/state-repos"
+    state: directory
+    owner: openclaw
+    group: openclaw
+    mode: "0750"
+  when: _agent_repos | length > 0
+
+- name: Clone agent state repos
+  git:
+    repo: "{{ item }}"
+    dest: "{{ openclaw_data_dir }}/state-repos/{{ item | hash('md5') }}"
+    version: "main"
+    accept_hostkey: true
+  become_user: openclaw
+  environment:
+    https_proxy: "http://{{ pipelock.listen }}"
+    GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=accept-new"
+  loop: "{{ _agent_repos }}"
+
+- name: Create per-agent directories
+  file:
+    path: "{{ openclaw_data_dir }}/agents/{{ item.id }}"
+    state: directory
+    owner: openclaw
+    group: openclaw
+    mode: "0750"
+  loop: "{{ openclaw_agents }}"
+  when: item.state_repo is defined
+
+- name: Link agent workspaces
+  file:
+    src: "{{ openclaw_data_dir }}/state-repos/{{ item.state_repo | hash('md5') }}/{{ item.state_path }}/workspace"
+    dest: "{{ openclaw_data_dir }}/agents/{{ item.id }}/workspace"
+    state: link
+    owner: openclaw
+    group: openclaw
+  loop: "{{ openclaw_agents }}"
+  when: item.state_repo is defined and item.state_path is defined
+
+- name: Check for shared knowledge directory
+  stat:
+    path: "{{ openclaw_data_dir }}/state-repos/{{ _agent_repos[0] | hash('md5') }}/shared"
+  register: _shared_dir
+  when: _agent_repos | length > 0
+
+- name: Link shared knowledge
+  file:
+    src: "{{ openclaw_data_dir }}/state-repos/{{ _agent_repos[0] | hash('md5') }}/shared"
+    dest: "{{ openclaw_data_dir }}/shared"
+    state: link
+    owner: openclaw
+    group: openclaw
+  when: _agent_repos | length > 0 and _shared_dir.stat.exists | default(false)
+
+- name: Check for memory dumps
+  stat:
+    path: "{{ openclaw_data_dir }}/state-repos/{{ item.state_repo | hash('md5') }}/{{ item.state_path }}/memory/dumps/main.sql"
+  register: _memory_dumps
+  loop: "{{ openclaw_agents }}"
+  when: item.state_repo is defined
+
+- name: Create agent memory directories
+  file:
+    path: "{{ openclaw_data_dir }}/agents/{{ item.item.id }}/memory"
+    state: directory
+    owner: openclaw
+    group: openclaw
+    mode: "0750"
+  loop: "{{ _memory_dumps.results }}"
+  when: item.stat is defined and item.stat.exists
+
+- name: Restore agent memory databases
+  shell: |
+    sqlite3 {{ openclaw_data_dir }}/agents/{{ item.item.id }}/memory/main.sqlite \
+      < {{ openclaw_data_dir }}/state-repos/{{ item.item.state_repo | hash('md5') }}/{{ item.item.state_path }}/memory/dumps/main.sql
+  args:
+    creates: "{{ openclaw_data_dir }}/agents/{{ item.item.id }}/memory/main.sqlite"
+  become_user: openclaw
+  loop: "{{ _memory_dumps.results }}"
+  when: item.stat is defined and item.stat.exists
+
+- name: Report agent state
+  debug:
+    msg: "Agent '{{ item.name | default(item.id) }}' workspace linked from {{ item.state_path | default('(none)') }}"
+  loop: "{{ openclaw_agents }}"

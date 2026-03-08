@@ -1,0 +1,23 @@
+[Unit]
+Description=Pipelock AI Agent Firewall
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pipelock run --config /etc/pipelock/pipelock.yaml
+Restart=always
+RestartSec=5
+
+User=pipelock
+Group=pipelock
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/pipelock
+PrivateTmp=true
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

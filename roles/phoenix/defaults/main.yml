@@ -1,0 +1,6 @@
+---
+telemetry_phoenix_defaults:
+  port: 6006
+  prometheus_port: 9091
+  version: "latest"
+  db_dir: "/var/lib/phoenix"
