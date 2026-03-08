@@ -26,8 +26,10 @@
   copy:
     content: |
       #!/bin/sh
-      echo "username=x-access-token"
-      echo "password={{ vault_github_token }}"
+      case "$1" in
+        Username*) echo "x-access-token" ;;
+        Password*) echo "{{ vault_github_token }}" ;;
+      esac
     dest: "{{ openclaw_data_dir }}/state-repos/.git-credential-helper"
     owner: openclaw
     group: openclaw
