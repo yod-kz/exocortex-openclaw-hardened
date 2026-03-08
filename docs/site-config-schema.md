@@ -4,6 +4,11 @@ All variables for an openclaw-hardened-site deployment, defined in
 `group_vars/agent_hosts/main.yml` unless otherwise noted.  Role defaults
 live in `roles/<role>/defaults/main.yml` and are overridden by site config.
 
+> **Important:** Ansible uses shallow dict merge. If you override **any** key
+> in a dict (e.g. `pipelock`), you must include the **entire** dict in your
+> site config. Role defaults only apply when the top-level dict is completely
+> absent from site config.
+
 ---
 
 ## Required Variables
