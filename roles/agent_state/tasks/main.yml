@@ -96,12 +96,32 @@
     group: openclaw
   when: _agent_repos | length > 0 and _shared_dir.stat.exists | default(false)
 
-- name: Check for memory dumps
+- name: Check for memory directory
   stat:
-    path: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/memory/dumps/main.sql"
-  register: _memory_dumps
+    path: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/memory"
+  register: _memory_dirs
   loop: "{{ openclaw_agents }}"
   when: item.state_repo is defined
+
+- name: Link agent memory directories
+  file:
+    src: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.item.state_repo] }}/{{ item.item.state_path }}/memory"
+    dest: "{{ openclaw_data_dir }}/agents/{{ item.item.id }}/memory"
+    state: link
+    owner: openclaw
+    group: openclaw
+  loop: "{{ _memory_dirs.results }}"
+  when: item.stat is defined and item.stat.exists
+
+# Discover all .sql dumps and restore each to a corresponding .sqlite file.
+# e.g. memory/dumps/memfacta.sql → memory/memfacta.sqlite
+- name: Find SQL dump files
+  find:
+    paths: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.item.state_repo] }}/{{ item.item.state_path }}/memory/dumps"
+    patterns: "*.sql"
+  register: _sql_dumps
+  loop: "{{ _memory_dirs.results }}"
+  when: item.stat is defined and item.stat.exists
 
 - name: Check if sqlite3 is installed
   command: which sqlite3
@@ -131,25 +151,23 @@
         path: /etc/apt/apt.conf.d/90pipelock
         state: absent
 
-- name: Create agent memory directories
-  file:
-    path: "{{ openclaw_data_dir }}/agents/{{ item.item.id }}/memory"
-    state: directory
-    owner: openclaw
-    group: openclaw
-    mode: "0750"
-  loop: "{{ _memory_dumps.results }}"
-  when: item.stat is defined and item.stat.exists
+- name: Build flat list of SQL dumps to restore
+  set_fact:
+    _all_sql_dumps: >-
+      {{ _sql_dumps.results
+         | selectattr('files', 'defined')
+         | map(attribute='files')
+         | flatten
+         | list }}
 
 - name: Restore agent memory databases
   shell: |
-    sqlite3 {{ openclaw_data_dir }}/agents/{{ item.item.id }}/memory/main.sqlite \
-      < {{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.item.state_repo] }}/{{ item.item.state_path }}/memory/dumps/main.sql
+    sqlite3 {{ item.path | regex_replace('/dumps/([^/]+)\.sql$', '/\1.sqlite') }} \
+      < {{ item.path }}
   args:
-    creates: "{{ openclaw_data_dir }}/agents/{{ item.item.id }}/memory/main.sqlite"
+    creates: "{{ item.path | regex_replace('/dumps/([^/]+)\\.sql$', '/\\1.sqlite') }}"
   become_user: openclaw
-  loop: "{{ _memory_dumps.results }}"
-  when: item.stat is defined and item.stat.exists
+  loop: "{{ _all_sql_dumps }}"
 
 - name: Report agent state
   debug:

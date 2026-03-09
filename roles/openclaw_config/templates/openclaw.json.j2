@@ -82,12 +82,17 @@
         "id": "{{ agent.id }}",
         "name": "{{ agent.name | default(agent.id) }}",
         "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/agents/{{ agent.id }}/workspace",
-        "skills": {{ agent.skills | default([]) | to_json }},
+{% if agent.skills is defined %}
+        "skills": {{ agent.skills | to_json }},
+{% endif %}
+        "memory": {
+          "path": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/agents/{{ agent.id }}/memory"
+        },
         "memorySearch": {
           "enabled": {{ agent.memory_search | default(false) | to_json }},
           "sources": ["memory", "sessions"],
           "extraPaths": [
-            "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/shared/knowledge"
+            "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/shared"
           ]
         }
       }{{ "," if not loop.last }}

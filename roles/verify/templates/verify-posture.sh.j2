@@ -105,6 +105,28 @@ check "gateway listening on :{{ openclaw.gateway_port }}"  "ss -tlnp | grep -q '
 {% endif %}
 check "openclaw.json exists"             "test -f /home/openclaw/.openclaw/openclaw.json"
 
+{% if openclaw_agents | default([]) | length > 0 %}
+echo ""
+echo -e "${CYAN}Agent Sandbox Isolation${NC}"
+# Find a running openclaw sandbox container and inspect its mounts
+_sandbox_cid=$(docker ps --filter name=openclaw --format '{% raw %}{{.ID}}{% endraw %}' 2>/dev/null | head -1)
+if [[ -n "$_sandbox_cid" ]]; then
+{% for agent in openclaw_agents %}
+{% if agent.state_repo is defined %}
+    # Verify only agent-scoped paths are mounted (workspace, memory, shared)
+    _mounts=$(docker inspect --format '{% raw %}{{range .Mounts}}{{.Source}} {{end}}{% endraw %}' "$_sandbox_cid" 2>/dev/null)
+    check "sandbox: no repo root mounted"   "echo '$_mounts' | grep -qv 'state-repos/[a-f0-9]*/agents$'"
+    check "sandbox: no other agent dirs"     "echo '$_mounts' | grep -qv 'agents/[^{{ agent.id }}]'"
+{% endif %}
+{% endfor %}
+    check "sandbox: read-only root"          "docker inspect --format '{% raw %}{{.HostConfig.ReadonlyRootfs}}{% endraw %}' $_sandbox_cid | grep -q true"
+    check "sandbox: memory limit set"        "docker inspect --format '{% raw %}{{.HostConfig.Memory}}{% endraw %}' $_sandbox_cid | grep -qv '^0$'"
+    check "sandbox: pids limit set"          "docker inspect --format '{% raw %}{{.HostConfig.PidsLimit}}{% endraw %}' $_sandbox_cid | grep -qv '^0$'"
+else
+    echo -e "  ${YELLOW}SKIP${NC}  No sandbox container running (agent may be idle)"
+fi
+{% endif %}
+
 echo ""
 echo -e "${CYAN}Infrastructure${NC}"
 check "DNS via OPNsense"                 "dig +short @{{ network.gateway_ip }} api.anthropic.com | grep -q '[0-9]'"
