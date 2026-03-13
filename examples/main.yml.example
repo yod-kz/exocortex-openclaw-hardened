@@ -7,6 +7,24 @@
 # Copy to: group_vars/agent_hosts/main.yml
 # ═════════════════════════════════════════════════════════════
 
+# ── Bootstrap (Phase 1 — system preparation) ──────────────────────────────
+# The bootstrap role prepares a bare Ubuntu host: creates the openclaw
+# user, installs Docker, Node.js, pnpm, and the OpenClaw binary.
+# Set enabled: false if you manage Phase 1 separately.
+bootstrap:
+  enabled: true
+  install_mode: "release"         # "release" (npm) or "development" (git clone + build)
+  nodejs_version: "22.x"
+  tailscale_enabled: false
+  system_tools: true
+  # SSH public keys to authorize for the openclaw user:
+  # ssh_keys:
+  #   - "ssh-ed25519 AAAA... user@host"
+
+# Override user defaults if needed (most deployments keep these as-is):
+# openclaw_user: openclaw
+# openclaw_home: /home/openclaw
+
 # ── Network Topology ─────────────────────────────────────────
 # Define your LAN layout: gateway, DNS, subnet, and which hosts
 # are allowed to communicate with agent nodes.
@@ -141,10 +159,6 @@ docker:
 # ── OpenClaw ─────────────────────────────────────────────────
 # Core agent platform settings.
 openclaw:
-  # openclaw-ansible repo (Phase 1 base installer)
-  ansible_repo: "https://github.com/openclaw/openclaw-ansible.git"
-  ansible_branch: "main"
-
   # Gateway — how clients connect to the agent
   gateway_bind: "lan"
   gateway_port: 18789
@@ -290,6 +304,16 @@ telemetry:
   grafana:
     port: 3000
     version: "11.6.0"
+
+  # Loki + Promtail — log aggregation
+  loki:
+    version: "3.4.2"
+    port: 3100
+    retention: "30d"
+    data_dir: "/var/lib/loki"
+
+  promtail:
+    version: "3.4.2"
 
   # Caddy reverse proxy — TLS termination for telemetry UIs
   caddy:
