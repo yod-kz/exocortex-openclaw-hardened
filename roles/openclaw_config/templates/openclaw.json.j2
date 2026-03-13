@@ -5,13 +5,34 @@
 {%     set _ = _eps.append(ep) %}
 {%   endif %}
 {% endfor %}
-{# Filter channels: only those with a valid bot token #}
+{# ── Agent-scoped channel accounts ───────────────────────────────── #}
+{# Collect agents that define their own Slack or Telegram identity.   #}
+{# Each entry: {agent: <agent dict>, slack: <merged>, telegram: <merged>} #}
+{% set _agent_slack = [] %}
+{% set _agent_telegram = [] %}
+{% for agent in openclaw_agents | default([]) %}
+{%   if agent.slack is defined and agent.slack.bot_token | default('') != '' %}
+{%     set _slack = _agent_slack_defaults | default({}) | combine(agent.slack, recursive=True) %}
+{%     set _ = _agent_slack.append({'agent': agent, 'slack': _slack}) %}
+{%   endif %}
+{%   if agent.telegram is defined and agent.telegram.bot_token | default('') != '' %}
+{%     set _tg = _agent_telegram_defaults | default({}) | combine(agent.telegram, recursive=True) %}
+{%     set _ = _agent_telegram.append({'agent': agent, 'telegram': _tg}) %}
+{%   endif %}
+{% endfor %}
+{# ── Legacy channels (non-agent-scoped, or fallback when no agent defines it) #}
 {% set _chans = {} %}
 {% for name, cfg in openclaw_channels.items() %}
-{%   if cfg.botToken | default('') != '' %}
+{%   if name == 'slack' and _agent_slack | length > 0 %}
+{#     Skip legacy slack — agents own it now #}
+{%   elif name == 'telegram' and _agent_telegram | length > 0 %}
+{#     Skip legacy telegram — agents own it now #}
+{%   elif cfg.botToken | default('') != '' %}
 {%     set _ = _chans.update({name: cfg}) %}
 {%   endif %}
 {% endfor %}
+{# ── Resolve default agent (for workspace path) ─────────────────── #}
+{% set _default_agent = openclaw_agents | default([]) | selectattr('default', 'defined') | selectattr('default', 'equalto', true) | first | default(openclaw_agents | default([]) | first | default(none)) %}
 {
   "meta": {
     "lastTouchedVersion": "ansible-managed",
@@ -60,8 +81,7 @@
         }{{ "," if not loop.last }}
 {% endfor %}
       },
-{% set _main_agent = openclaw_agents | default([]) | selectattr('id', 'equalto', 'main') | first | default(none) %}
-      "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/{% if _main_agent %}agents/{{ _main_agent.workspace_subdir | default('main') }}/workspace{% else %}workspace{% endif %}",
+      "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/{% if _default_agent %}agents/{{ _default_agent.workspace_subdir | default(_default_agent.id) }}/workspace{% else %}workspace{% endif %}",
       "compaction": {
         "mode": "{{ openclaw.compaction_mode }}"
       },
@@ -85,6 +105,9 @@
       {
         "id": "{{ agent.id }}",
         "name": "{{ agent.name | default(agent.id) }}",
+{% if agent.default | default(false) %}
+        "default": true,
+{% endif %}
         "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/agents/{{ agent.workspace_subdir | default(agent.id) }}/workspace",
 {% if agent.skills is defined %}
         "skills": {{ agent.skills | to_json }},
@@ -121,7 +144,41 @@
   "session": {
     "dmScope": "per-channel-peer"
   },
-  "channels": {{ _chans | to_nice_json }},
+{# Build channels dict: start with legacy channels, add agent-scoped Slack/Telegram #}
+{% set _channels_out = {} %}
+{% for name, cfg in _chans.items() %}
+{%   set _ = _channels_out.update({name: cfg}) %}
+{% endfor %}
+{% if _agent_slack | length > 0 %}
+{%   set _slack_default = _agent_slack | selectattr('agent.default', 'defined') | selectattr('agent.default', 'equalto', true) | first | default(_agent_slack[0]) %}
+{%   set _slack_accounts = {} %}
+{%   for entry in _agent_slack %}
+{%     set _ = _slack_accounts.update({entry.agent.id: {
+         'name': entry.agent.name | default(entry.agent.id),
+         'mode': entry.slack.mode | default('socket'),
+         'botToken': entry.slack.bot_token,
+         'appToken': entry.slack.app_token | default(''),
+         'groupPolicy': entry.slack.group_policy | default('allowlist'),
+         'streaming': entry.slack.streaming | default('partial')
+       }}) %}
+{%   endfor %}
+{%   set _ = _channels_out.update({'slack': {'defaultAccount': _slack_default.agent.id, 'accounts': _slack_accounts}}) %}
+{% endif %}
+{% if _agent_telegram | length > 0 %}
+{%   set _tg_default = _agent_telegram | selectattr('agent.default', 'defined') | selectattr('agent.default', 'equalto', true) | first | default(_agent_telegram[0]) %}
+{%   set _tg_accounts = {} %}
+{%   for entry in _agent_telegram %}
+{%     set _ = _tg_accounts.update({entry.agent.id: {
+         'name': entry.agent.name | default(entry.agent.id),
+         'botToken': entry.telegram.bot_token,
+         'dmPolicy': entry.telegram.dm_policy | default('pairing'),
+         'groupPolicy': entry.telegram.group_policy | default('allowlist'),
+         'streaming': entry.telegram.streaming | default('partial')
+       }}) %}
+{%   endfor %}
+{%   set _ = _channels_out.update({'telegram': {'defaultAccount': _tg_default.agent.id, 'accounts': _tg_accounts}}) %}
+{% endif %}
+  "channels": {{ _channels_out | to_nice_json }},
   "gateway": {
     "port": {{ openclaw.gateway_port }},
     "mode": "local",
@@ -166,9 +223,33 @@
     }
   },
 {% endif %}
+{% if _agent_slack | length > 0 or _agent_telegram | length > 0 %}
+  "bindings": [
+{% set _all_bindings = [] %}
+{% for entry in _agent_slack %}
+{%   set _ = _all_bindings.append({'agentId': entry.agent.id, 'channel': 'slack', 'accountId': entry.agent.id}) %}
+{% endfor %}
+{% for entry in _agent_telegram %}
+{%   set _ = _all_bindings.append({'agentId': entry.agent.id, 'channel': 'telegram', 'accountId': entry.agent.id}) %}
+{% endfor %}
+{% for binding in _all_bindings %}
+    {
+      "agentId": "{{ binding.agentId }}",
+      "match": { "channel": "{{ binding.channel }}", "accountId": "{{ binding.accountId }}" }
+    }{{ "," if not loop.last }}
+{% endfor %}
+  ],
+{% endif %}
   "plugins": {
     "entries": {
-{% for channel in _chans.keys() %}
+{% set _plugin_channels = _chans.keys() | list %}
+{% if _agent_slack | length > 0 and 'slack' not in _plugin_channels %}
+{%   set _ = _plugin_channels.append('slack') %}
+{% endif %}
+{% if _agent_telegram | length > 0 and 'telegram' not in _plugin_channels %}
+{%   set _ = _plugin_channels.append('telegram') %}
+{% endif %}
+{% for channel in _plugin_channels %}
       "{{ channel }}": { "enabled": true }{{ "," if not loop.last }}
 {% endfor %}
     }
