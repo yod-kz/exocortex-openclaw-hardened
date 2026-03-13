@@ -322,6 +322,44 @@ telemetry:
     prometheus_port: 9443
     phoenix_port: 6443
 
+# ── Agent Definitions ────────────────────────────────────────
+# Each agent can have its own Slack and/or Telegram identity.
+# When agents define a slack/telegram block, OpenClaw runs
+# multi-account mode with per-agent routing (bindings).
+# Agents without channel blocks share host-level openclaw_channels.
+openclaw_agents:
+  - id: "mira"
+    default: true
+    name: "Mira"
+    workspace_subdir: "mira"
+    memory_search: true
+    state_repo: "https://github.com/your-org/your-agents.git"
+    state_path: "agents/mira"
+    slack:
+      bot_token: "{{ vault_mira_slack_bot_token }}"
+      app_token: "{{ vault_mira_slack_app_token }}"
+      # Optional overrides (defaults shown):
+      # mode: "socket"
+      # group_policy: "allowlist"
+      # streaming: "partial"
+    telegram:
+      bot_token: "{{ vault_mira_telegram_bot_token }}"
+      # Optional overrides (defaults shown):
+      # dm_policy: "pairing"
+      # group_policy: "allowlist"
+      # streaming: "partial"
+
+  # Add more agents with their own channel apps:
+  # - id: "atlas"
+  #   name: "Atlas"
+  #   workspace_subdir: "atlas"
+  #   slack:
+  #     bot_token: "{{ vault_atlas_slack_bot_token }}"
+  #     app_token: "{{ vault_atlas_slack_app_token }}"
+
+  # Agents without slack/telegram blocks have no channel identity
+  # and are only reachable via the gateway UI agent selector.
+
 # ── Verification ─────────────────────────────────────────────
 # Endpoints checked by the verify role after deployment
 verify:

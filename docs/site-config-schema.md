@@ -259,11 +259,39 @@ Per-host overrides, defined per inventory host.
 | Variable | Type | Description |
 |----------|------|-------------|
 | `host_ip` | string | Host's LAN IP address |
-| `openclaw_channels` | dict | Channel configurations keyed by provider name (see below) |
+| `openclaw_channels` | dict | Legacy channel configs (non-agent-scoped). Empty when all channels are agent-scoped. |
 | `openclaw_gateway_token` | string | Gateway bearer token (vault reference) |
 | `openclaw_gateway_password` | string | Gateway password (vault reference) |
 
-### Channel fields (per entry in `openclaw_channels`)
+### Agent Slack identity (`openclaw_agents[].slack`)
+
+When an agent defines a `slack` block, OpenClaw runs that agent's Slack identity
+as a separate account. The gateway uses `bindings` to route messages from each
+Slack account to its owning agent. Agents without a `slack` block have no Slack
+presence and are only reachable via the gateway UI.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `slack.bot_token` | string | *(required)* | Slack bot token (xoxb-...) |
+| `slack.app_token` | string | `""` | Slack app-level token for Socket Mode (xapp-...) |
+| `slack.mode` | string | `socket` | Connection mode: `socket` or `http` |
+| `slack.group_policy` | string | `allowlist` | Channel access policy |
+| `slack.streaming` | string | `partial` | Stream preview mode |
+
+### Agent Telegram identity (`openclaw_agents[].telegram`)
+
+Same pattern as Slack — each agent can have its own Telegram bot.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `telegram.bot_token` | string | *(required)* | Telegram bot token |
+| `telegram.dm_policy` | string | `pairing` | DM access policy |
+| `telegram.group_policy` | string | `allowlist` | Group access policy |
+| `telegram.streaming` | string | `partial` | Stream preview mode |
+
+### Legacy channel fields (per entry in `openclaw_channels`)
+
+Used only when no agent defines the corresponding channel block.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -282,8 +310,11 @@ All secrets are stored in `group_vars/agent_hosts/vault.yml` (encrypted with
 
 | Variable | Used by |
 |----------|---------|
-| `vault_telegram_bot_token` | `openclaw_channels.telegram.botToken` |
-| `vault_slack_bot_token` | `openclaw_channels.slack.botToken` |
+| `vault_<agentid>_slack_bot_token` | `openclaw_agents[].slack.bot_token` |
+| `vault_<agentid>_slack_app_token` | `openclaw_agents[].slack.app_token` |
+| `vault_<agentid>_telegram_bot_token` | `openclaw_agents[].telegram.bot_token` |
+| `vault_telegram_bot_token` | *(deprecated)* Legacy `openclaw_channels.telegram.botToken` |
+| `vault_slack_bot_token` | *(deprecated)* Legacy `openclaw_channels.slack.botToken` |
 | `vault_anthropic_api_key` | `inference.endpoints[].api_key` (Anthropic) |
 | `vault_openai_api_key` | `inference.endpoints[].api_key` (OpenAI) |
 | `vault_tokenator_pat` | `inference.endpoints[].api_key` (Kamiwaza tokenator) |

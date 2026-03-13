@@ -1,13 +1,16 @@
 ---
 host_ip: "YOUR_HOST_IP"
 
-openclaw_channels:
-  telegram:
-    enabled: true
-    botToken: "{{ vault_telegram_bot_token | default('') }}"
+# Non-agent-scoped channels (if any).
+# Slack and Telegram go here ONLY when no agent defines its own
+# slack/telegram block. When agents define channel blocks,
+# multi-account routing handles them automatically.
+openclaw_channels: {}
+  # Legacy single-agent Slack (use agent-scoped slack instead for multi-agent):
   # slack:
   #   enabled: true
   #   botToken: "{{ vault_slack_bot_token | default('') }}"
+  #   appToken: "{{ vault_slack_app_token | default('') }}"
 
 openclaw_gateway_token: "{{ vault_openclaw_gateway_token }}"
 openclaw_gateway_password: "{{ vault_openclaw_gateway_password }}"
