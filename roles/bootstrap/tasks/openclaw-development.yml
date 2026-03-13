@@ -43,6 +43,7 @@
     PNPM_HOME: "{{ openclaw_home }}/.local/share/pnpm"
     PATH: "{{ openclaw_home }}/.local/bin:{{ openclaw_home }}/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin"
     HOME: "{{ openclaw_home }}"
+  changed_when: true  # Build always updates dist/
 
 - name: Verify dist directory exists
   stat:

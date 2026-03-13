@@ -73,27 +73,18 @@
 
 - name: Enable lingering for openclaw user
   command: "loginctl enable-linger {{ openclaw_user }}"
-  changed_when: false
+  args:
+    creates: "/var/lib/systemd/linger/{{ openclaw_user }}"
 
-- name: Create runtime directory for openclaw user
-  file:
-    path: "/run/user/{{ openclaw_uid.stdout }}"
-    state: directory
-    owner: "{{ openclaw_user }}"
-    group: "{{ openclaw_user }}"
-    mode: "0700"
-
-- name: Set XDG_RUNTIME_DIR in .bashrc
-  lineinfile:
-    path: "{{ openclaw_home }}/.bashrc"
-    line: "export XDG_RUNTIME_DIR=/run/user/$(id -u)"
-    state: present
-
-- name: Configure DBUS session bus in .bashrc
+- name: Configure XDG runtime and DBUS session bus in .bashrc
   blockinfile:
     path: "{{ openclaw_home }}/.bashrc"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK - DBus config"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - XDG and DBus config"
     block: |
+      # XDG runtime directory
+      export XDG_RUNTIME_DIR=/run/user/$(id -u)
+
+      # DBus session bus configuration
       if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
         export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
       fi

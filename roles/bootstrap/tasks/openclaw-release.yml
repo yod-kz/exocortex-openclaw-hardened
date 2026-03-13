@@ -12,7 +12,7 @@
     PATH: "{{ openclaw_home }}/.local/bin:{{ openclaw_home }}/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin"
     HOME: "{{ openclaw_home }}"
   register: openclaw_install
-  changed_when: "'Already up to date' not in openclaw_install.stdout"
+  changed_when: "'Packages: ' in openclaw_install.stdout"
 
 - name: Verify openclaw installation
   shell:
