@@ -29,3 +29,33 @@
 - name: Load nftables ruleset
   command: nft -f /etc/nftables.conf
   changed_when: true
+
+# ── Slack IP refresh (WebSocket bypasses Pipelock proxy) ────
+- name: Install Slack IP refresh script
+  template:
+    src: refresh-slack-ips.sh.j2
+    dest: /usr/local/bin/refresh-slack-ips.sh
+    mode: "0755"
+
+- name: Install Slack IP refresh service
+  template:
+    src: refresh-slack-ips.service.j2
+    dest: /etc/systemd/system/refresh-slack-ips.service
+    mode: "0644"
+
+- name: Install Slack IP refresh timer
+  template:
+    src: refresh-slack-ips.timer.j2
+    dest: /etc/systemd/system/refresh-slack-ips.timer
+    mode: "0644"
+
+- name: Enable Slack IP refresh timer
+  systemd:
+    name: refresh-slack-ips.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Seed Slack IPs on first run
+  command: /usr/local/bin/refresh-slack-ips.sh
+  changed_when: true

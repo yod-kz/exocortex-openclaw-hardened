@@ -54,10 +54,14 @@
 {% for ep in _eps %}
         "{{ ep.provider_name }}/{{ ep.model_id }}": {
           "alias": "{{ ep.model_id | lower | replace('_','-') | replace('/','-') }}"
+{% if ep.params is defined %}
+          ,"params": {{ ep.params | to_json }}
+{% endif %}
         }{{ "," if not loop.last }}
 {% endfor %}
       },
-      "workspace": "/home/openclaw/.openclaw/workspace",
+{% set _main_agent = openclaw_agents | default([]) | selectattr('id', 'equalto', 'main') | first | default(none) %}
+      "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/{% if _main_agent %}agents/{{ _main_agent.workspace_subdir | default('main') }}/workspace{% else %}workspace{% endif %}",
       "compaction": {
         "mode": "{{ openclaw.compaction_mode }}"
       },
@@ -81,7 +85,7 @@
       {
         "id": "{{ agent.id }}",
         "name": "{{ agent.name | default(agent.id) }}",
-        "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/agents/{{ agent.id }}/workspace",
+        "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/agents/{{ agent.workspace_subdir | default(agent.id) }}/workspace",
 {% if agent.skills is defined %}
         "skills": {{ agent.skills | to_json }},
 {% endif %}

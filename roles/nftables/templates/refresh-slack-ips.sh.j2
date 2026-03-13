@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+# Resolve Slack domains and populate nftables slack_ips set.
+# Run by refresh-slack-ips.timer every 5 minutes.
+
+IPS=$(dig +short wss-primary.slack.com api.slack.com slack.com 2>/dev/null \
+    | sort -u | grep -E '^[0-9]') || true
+
+if [ -z "$IPS" ]; then
+    logger -t refresh-slack-ips "DNS resolution failed, skipping"
+    exit 0
+fi
+
+nft flush set inet openclaw slack_ips
+ELEMENTS=$(echo "$IPS" | paste -sd, -)
+nft add element inet openclaw slack_ips "{ $ELEMENTS }"
+logger -t refresh-slack-ips "Updated $(echo "$IPS" | wc -l) IPs"
