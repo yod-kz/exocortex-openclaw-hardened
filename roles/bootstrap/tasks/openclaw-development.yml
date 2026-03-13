@@ -1,0 +1,94 @@
+---
+# Development mode: clone repo, build from source, symlink binary
+
+- name: Create code directory
+  file:
+    path: "{{ openclaw_code_dir }}"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: "0755"
+
+- name: Clone or update openclaw repository
+  git:
+    repo: "{{ bootstrap.openclaw_repo_url }}"
+    dest: "{{ openclaw_code_dir }}/openclaw"
+    version: "{{ bootstrap.openclaw_repo_branch }}"
+    update: true
+  become: true
+  become_user: "{{ openclaw_user }}"
+
+- name: Install dependencies with pnpm
+  shell:
+    cmd: pnpm install
+    chdir: "{{ openclaw_code_dir }}/openclaw"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ openclaw_user }}"
+  environment:
+    PNPM_HOME: "{{ openclaw_home }}/.local/share/pnpm"
+    PATH: "{{ openclaw_home }}/.local/bin:{{ openclaw_home }}/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin"
+    HOME: "{{ openclaw_home }}"
+  register: pnpm_install_result
+  changed_when: "'Already up to date' not in pnpm_install_result.stdout"
+
+- name: Build openclaw from source
+  shell:
+    cmd: pnpm build
+    chdir: "{{ openclaw_code_dir }}/openclaw"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ openclaw_user }}"
+  environment:
+    PNPM_HOME: "{{ openclaw_home }}/.local/share/pnpm"
+    PATH: "{{ openclaw_home }}/.local/bin:{{ openclaw_home }}/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin"
+    HOME: "{{ openclaw_home }}"
+
+- name: Verify dist directory exists
+  stat:
+    path: "{{ openclaw_code_dir }}/openclaw/dist"
+  register: dist_dir
+  failed_when: not dist_dir.stat.exists
+
+- name: Create symlink to openclaw binary
+  file:
+    src: "{{ openclaw_code_dir }}/openclaw/bin/openclaw.js"
+    dest: "{{ openclaw_home }}/.local/bin/openclaw"
+    state: link
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    force: true
+
+- name: Make openclaw binary executable
+  file:
+    path: "{{ openclaw_code_dir }}/openclaw/bin/openclaw.js"
+    mode: "0755"
+
+- name: Add development aliases to .bashrc
+  blockinfile:
+    path: "{{ openclaw_home }}/.bashrc"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - OpenClaw development"
+    block: |
+      export OPENCLAW_DEV_DIR="{{ openclaw_code_dir }}/openclaw"
+      alias openclaw-rebuild='cd {{ openclaw_code_dir }}/openclaw && pnpm build'
+      alias openclaw-dev='cd {{ openclaw_code_dir }}/openclaw'
+      alias openclaw-pull='cd {{ openclaw_code_dir }}/openclaw && git pull && pnpm install && pnpm build'
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+
+- name: Verify openclaw installation
+  shell:
+    cmd: openclaw --version
+    executable: /bin/bash
+  become: true
+  become_user: "{{ openclaw_user }}"
+  environment:
+    PNPM_HOME: "{{ openclaw_home }}/.local/share/pnpm"
+    PATH: "{{ openclaw_home }}/.local/bin:{{ openclaw_home }}/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin"
+    HOME: "{{ openclaw_home }}"
+  register: openclaw_dev_version
+  changed_when: false
+
+- name: Display installed version
+  debug:
+    msg: "OpenClaw installed from source: {{ openclaw_dev_version.stdout }}"
