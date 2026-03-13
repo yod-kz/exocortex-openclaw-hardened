@@ -1,0 +1,24 @@
+# OpenClaw sudo permissions (scoped for security)
+#
+# Service control - openclaw service only
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl start openclaw
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop openclaw
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart openclaw
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl status openclaw
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable openclaw
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl disable openclaw
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
+
+{% if bootstrap.tailscale_enabled | default(false) %}
+# Tailscale diagnostics + connect/disconnect
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale status
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale down
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale ip *
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale version
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale ping *
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale whois *
+{% endif %}
+
+# Journal access - openclaw logs only
+{{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw *
