@@ -206,7 +206,8 @@ setup_slack() {
 
     local manifest
     manifest="$(sed \
-      -e "s/__AGENT_DISPLAY_NAME__/${AGENT_NAME}/g" \
+      -e "s/__AGENT_FULL_NAME__/${AGENT_NAME}/g" \
+      -e "s/__AGENT_DISPLAY_NAME__/${AGENT_NAME%% *}/g" \
       "${MANIFEST_TPL}")"
 
     if ${DRY_RUN}; then
@@ -258,7 +259,8 @@ setup_slack() {
     printf "    2. Choose \"From an app manifest\" → Select workspace\n"
     printf "    3. Paste the manifest from:\n"
     printf "       ${CYAN}${MANIFEST_TPL}${NC}\n"
-    printf "       (Replace __AGENT_DISPLAY_NAME__ with \"${AGENT_NAME}\")\n"
+    printf "       (Replace __AGENT_FULL_NAME__ with \"${AGENT_NAME}\"\n"
+    printf "        and __AGENT_DISPLAY_NAME__ with \"${AGENT_NAME%% *}\")\n"
     echo ""
     printf "  ${BOLD}Option B:${NC} Set SLACK_CONFIG_TOKEN for API creation:\n"
     printf "    1. Go to ${CYAN}https://api.slack.com/apps${NC} → Your Apps\n"
