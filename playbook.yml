@@ -33,6 +33,7 @@
         locksmith: "{{ _locksmith_defaults | default({}) | combine(locksmith | default({}), recursive=True) }}"
         llamafirewall: "{{ _llamafirewall_defaults | default({}) | combine(llamafirewall | default({}), recursive=True) }}"
         openclaw: "{{ _openclaw_defaults | default({}) | combine(openclaw | default({}), recursive=True) }}"
+        ollama: "{{ _ollama_defaults | default({}) | combine(ollama | default({}), recursive=True) }}"
         network: "{{ network_defaults | default({}) | combine(network | default({}), recursive=True) }}"
       tags: [always]
 
@@ -99,6 +100,11 @@
       tags: [phase2, telemetry, caddy]
       when: telemetry.enabled | default(false)
 
+    # ── Phase 2c: Ollama (local embeddings) ────────────────────
+    - role: ollama
+      tags: [phase2, ollama]
+      when: ollama.enabled | default(false)
+
     # ── Phase 3: OpenClaw Configuration ──────────────────────
     - role: openclaw_onboard
       tags: [phase3, onboard]
@@ -124,4 +130,4 @@
   become: true
   roles:
     - role: verify
-      tags: [verify]
+      tags: [verify, service]
