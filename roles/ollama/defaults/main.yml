@@ -1,0 +1,8 @@
+---
+_ollama_defaults:
+  enabled: false
+  # Embedding model to pull after install
+  embedding_model: "nomic-embed-text"
+  # Bind address (localhost only — accessed by OpenClaw on same host)
+  host: "127.0.0.1"
+  port: 11434

@@ -1,0 +1,131 @@
+---
+# Install Ollama and pull an embedding model for OpenClaw memory search.
+# Ollama binds to localhost only — no nftables or Pipelock changes needed.
+
+- name: Check if Ollama is installed
+  command: which ollama
+  register: _ollama_check
+  changed_when: false
+  failed_when: false
+
+- name: Install Ollama
+  when: _ollama_check.rc != 0
+  block:
+    - name: Download Ollama install script
+      get_url:
+        url: https://ollama.com/install.sh
+        dest: /tmp/ollama-install.sh
+        mode: "0755"
+      environment:
+        http_proxy: "http://{{ pipelock.listen }}"
+        https_proxy: "http://{{ pipelock.listen }}"
+
+    - name: Run Ollama install script
+      command: /tmp/ollama-install.sh
+      environment:
+        http_proxy: "http://{{ pipelock.listen }}"
+        https_proxy: "http://{{ pipelock.listen }}"
+        OLLAMA_HOST: "{{ ollama.host }}:{{ ollama.port }}"
+      register: _ollama_install
+
+    - name: Remove install script
+      file:
+        path: /tmp/ollama-install.sh
+        state: absent
+
+- name: Create Ollama service override directory
+  file:
+    path: /etc/systemd/system/ollama.service.d
+    state: directory
+    mode: "0755"
+
+- name: Configure Ollama bind address
+  copy:
+    content: |
+      [Service]
+      Environment="OLLAMA_HOST={{ ollama.host }}:{{ ollama.port }}"
+    dest: /etc/systemd/system/ollama.service.d/override.conf
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart ollama
+
+- name: Enable and start Ollama
+  systemd:
+    name: ollama
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait for Ollama to be ready
+  uri:
+    url: "http://{{ ollama.host }}:{{ ollama.port }}/api/tags"
+    method: GET
+    status_code: 200
+  register: _ollama_ready
+  until: _ollama_ready.status == 200
+  retries: 10
+  delay: 3
+
+- name: Check if embedding model is pulled
+  uri:
+    url: "http://{{ ollama.host }}:{{ ollama.port }}/api/tags"
+    method: GET
+    return_content: true
+  register: _ollama_models
+
+- name: Pull embedding model
+  when: ollama.embedding_model not in (_ollama_models.json.models | default([]) | map(attribute='name') | list | join(' '))
+  block:
+    - name: Get Ollama user UID
+      command: id -u ollama
+      register: _ollama_uid
+      changed_when: false
+      failed_when: false
+
+    - name: Add temporary egress rule for Ollama model pull
+      shell:
+        cmd: |
+          OLLAMA_UID="{{ _ollama_uid.stdout | default('') }}"
+          if [ -z "$OLLAMA_UID" ]; then
+            echo "ollama user not found, pulling as root"
+            exit 0
+          fi
+          BLOCK_HANDLE=$(nft -a list chain inet openclaw output \
+            | grep 'egress-block' | grep -oP 'handle \K[0-9]+')
+          if [ -n "$BLOCK_HANDLE" ]; then
+            nft insert rule inet openclaw output position "$BLOCK_HANDLE" \
+              meta skuid "$OLLAMA_UID" tcp dport \{ 80, 443 \} \
+              ip daddr != \{ 10.0.0.0/8, 127.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 \} \
+              counter accept comment "temp-ollama-pull"
+          fi
+        executable: /bin/bash
+
+    - name: Pull {{ ollama.embedding_model }}
+      command: "ollama pull {{ ollama.embedding_model }}"
+      environment:
+        OLLAMA_HOST: "{{ ollama.host }}:{{ ollama.port }}"
+      register: _model_pull
+      timeout: 300
+
+  always:
+    - name: Remove temporary Ollama egress rule
+      shell:
+        cmd: |
+          HANDLE=$(nft -a list chain inet openclaw output \
+            | grep 'temp-ollama-pull' \
+            | grep -oP 'handle \K[0-9]+')
+          [ -n "$HANDLE" ] && nft delete rule inet openclaw output handle "$HANDLE" || true
+        executable: /bin/bash
+      changed_when: false
+
+- name: Verify embedding model
+  command: "ollama list"
+  environment:
+    OLLAMA_HOST: "{{ ollama.host }}:{{ ollama.port }}"
+  register: _ollama_list
+  changed_when: false
+
+- name: Display Ollama status
+  debug:
+    msg: "Ollama ready at {{ ollama.host }}:{{ ollama.port }} — models: {{ _ollama_list.stdout }}"
