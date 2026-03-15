@@ -50,6 +50,18 @@
     GIT_ASKPASS: "{{ openclaw_data_dir }}/state-repos/.git-credential-helper"
   loop: "{{ _agent_repos_https }}"
 
+- name: Pull latest agent state
+  command: >
+    git -c http.proxy=http://{{ pipelock.listen }} pull --ff-only
+  args:
+    chdir: "{{ openclaw_data_dir }}/state-repos/{{ item | hash('md5') }}"
+  become_user: openclaw
+  environment:
+    GIT_ASKPASS: "{{ openclaw_data_dir }}/state-repos/.git-credential-helper"
+  register: _git_pull
+  changed_when: "'Already up to date' not in _git_pull.stdout"
+  loop: "{{ _agent_repos_https }}"
+
 - name: Remove credential helper
   file:
     path: "{{ openclaw_data_dir }}/state-repos/.git-credential-helper"
@@ -63,6 +75,8 @@
     group: openclaw
     mode: "0750"
   loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
   when: item.state_repo is defined
 
 # Symlinks use the HTTPS URL hash (not SSH) since that's what we cloned with
@@ -79,6 +93,8 @@
     owner: openclaw
     group: openclaw
   loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
   when: item.state_repo is defined and item.state_path is defined
 
 - name: Check for shared knowledge directory
@@ -101,6 +117,8 @@
     path: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/memory"
   register: _memory_dirs
   loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
   when: item.state_repo is defined
 
 - name: Link agent memory directories
@@ -154,7 +172,7 @@
 - name: Build flat list of SQL dumps to restore
   set_fact:
     _all_sql_dumps: >-
-      {{ _sql_dumps.results
+      {{ (_sql_dumps.results | default([]))
          | selectattr('files', 'defined')
          | map(attribute='files')
          | flatten
@@ -183,3 +201,5 @@
   debug:
     msg: "Agent '{{ item.name | default(item.id) }}' workspace linked from {{ item.state_path | default('(none)') }}"
   loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
