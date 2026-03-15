@@ -11,6 +11,14 @@ live in `roles/<role>/defaults/main.yml` and are overridden by site config.
 
 ---
 
+## Global Variables
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `openclaw_version` | string | `latest` | Pinned OpenClaw version (e.g. `2026.3.12`). Set to `latest` to skip version management. |
+
+---
+
 ## Required Variables
 
 ### network
@@ -157,12 +165,59 @@ Core OpenClaw gateway and agent runtime settings.
 | `openclaw.gateway_bind` | string | `lan` | Gateway bind mode (`lan` or `0.0.0.0`) |
 | `openclaw.gateway_port` | int | `18789` | Gateway listen port |
 | `openclaw.gateway_auth_mode` | string | `password` | Auth mode: `password` or `token` |
-| `openclaw.sandbox.mode` | string | `non-main` | Sandbox mode for agent containers |
+| `openclaw.sandbox.mode` | string | `non-main` | Sandbox mode — see [Sandbox Modes](#sandbox-modes) below |
 | `openclaw.sandbox.docker_network` | string | `bridge` | Docker network for sandboxed containers |
 | `openclaw.sandbox.read_only_root` | bool | `true` | Mount container root filesystem read-only |
 | `openclaw.sandbox.memory` | string | `2g` | Container memory limit |
 | `openclaw.sandbox.cpus` | int | `2` | Container CPU limit |
 | `openclaw.sandbox.pids_limit` | int | `256` | Container PID limit |
+
+#### Sandbox Modes
+
+The sandbox controls whether agent tool calls (exec, file read/write, fetch) run
+inside isolated Docker containers or directly on the host.
+
+| Mode | Behaviour | Use case |
+|------|-----------|----------|
+| `non-main` | Sandboxes all non-main sessions (Slack, Telegram) | Default — strongest isolation for messaging channels |
+| `main-only` | Sandboxes only the gateway UI sessions | Lighter — trusts messaging channels, isolates web UI |
+| `off` | No sandbox — tool calls run directly as the `openclaw` user | Weakest isolation, but no path restrictions |
+
+**Current recommendation: `off` with config lockdown.**
+
+OpenClaw's sandbox path check blocks reads to any path outside the sandbox root
+directory. This prevents agents from accessing the platform's own built-in
+skills and documentation (installed under `~/.local/share/pnpm/...`), which
+causes agents to fail on basic research and skill-loading operations. There is
+currently no `allowedReadPaths` option to extend the sandbox root.
+
+Until OpenClaw adds support for mounting the install directory into the sandbox,
+set `sandbox.mode: "off"` and rely on the platform's other security layers:
+
+| Layer | Protection | Active when sandbox is off? |
+|-------|------------|---------------------------|
+| **nftables** | Blocks direct internet egress; only Pipelock can reach external hosts | Yes |
+| **Pipelock** | HTTPS proxy with domain allowlist, DLP scanning, rate limiting | Yes |
+| **LlamaFirewall** | Scans inference requests for prompt injection and policy violations | Yes |
+| **Unix permissions** | Agents run as `openclaw` user with limited system access | Yes |
+| **Config lockdown** | `openclaw.json` owned by `root:openclaw` mode `0640` — agents can read but not modify | Yes |
+| **OpenClaw tool allowlist** | `tools.profile` controls which tools are available | Yes |
+
+**What you lose with sandbox off:**
+
+- Filesystem isolation — agents can read/write anything the `openclaw` user can
+  access, including other agents' workspaces and memory
+- Resource limits — no memory/CPU/PID caps on tool execution
+- Network isolation — tool calls use the host network (still constrained by
+  nftables + Pipelock)
+
+**Mitigations applied:**
+
+- `openclaw.json` is deployed as `root:openclaw 0640` so agents cannot modify
+  their own configuration, proxy settings, or tool restrictions
+- nftables ensures all HTTP/HTTPS traffic must go through Pipelock regardless
+  of proxy environment variables — removing or changing `HTTP_PROXY` causes
+  requests to be dropped, not to bypass the proxy
 | `openclaw.tools_profile` | string | `messaging` | Tools profile to activate |
 | `openclaw.fetch_proxy` | string | `http://172.17.0.1:8888` | HTTP(S) proxy for containers (Pipelock via Docker bridge) |
 | `openclaw.no_proxy_extra` | list of string | *(undefined)* | Additional hosts to bypass the proxy |
@@ -276,6 +331,7 @@ presence and are only reachable via the gateway UI.
 | `slack.app_token` | string | `""` | Slack app-level token for Socket Mode (xapp-...) |
 | `slack.mode` | string | `socket` | Connection mode: `socket` or `http` |
 | `slack.group_policy` | string | `allowlist` | Channel access policy |
+| `slack.group_allow_from` | list of string | *(none)* | Slack user IDs allowed in group channels (when `group_policy: allowlist`) |
 | `slack.streaming` | string | `partial` | Stream preview mode |
 
 ### Agent Telegram identity (`openclaw_agents[].telegram`)
@@ -287,6 +343,7 @@ Same pattern as Slack — each agent can have its own Telegram bot.
 | `telegram.bot_token` | string | *(required)* | Telegram bot token |
 | `telegram.dm_policy` | string | `pairing` | DM access policy |
 | `telegram.group_policy` | string | `allowlist` | Group access policy |
+| `telegram.group_allow_from` | list of string | *(none)* | Telegram user/bot IDs allowed in groups (when `group_policy: allowlist`). Use bot IDs for inter-agent group chats. |
 | `telegram.streaming` | string | `partial` | Stream preview mode |
 
 ### Legacy channel fields (per entry in `openclaw_channels`)
@@ -300,6 +357,37 @@ Used only when no agent defines the corresponding channel block.
 | `dmPolicy` | string | DM policy (e.g. `pairing`) |
 | `groupPolicy` | string | Group policy (e.g. `allowlist`) |
 | `streaming` | string | Streaming mode (e.g. `partial`) |
+
+---
+
+## Version Upgrades
+
+Set `openclaw_version` in site config and deploy with `--tags service`:
+
+```bash
+ansible-playbook -i ../site/inventory/hosts.yml playbook.yml \
+  --tags service --limit <host> --ask-vault-pass
+```
+
+The upgrade task (`openclaw_service` role) will:
+
+1. Stop OpenClaw
+2. Stop Pipelock
+3. Insert a temporary nftables rule allowing the `openclaw` user direct
+   internet egress on ports 80/443
+4. Run `pnpm add -g openclaw@<version>`
+5. Remove the temporary nftables rule
+6. Start Pipelock and verify it is active
+7. Start OpenClaw
+8. Run the `verify` role (posture check)
+
+**Why the nftables workaround?** pnpm's HTTPS client is incompatible with
+Pipelock's CONNECT tunnel proxy. Parallel dependency resolution exhausts the
+proxy rate limit and triggers 403 errors. The temporary direct-egress rule
+bypasses the proxy for the install only; Pipelock and nftables are fully
+restored immediately after.
+
+To skip version management, set `openclaw_version: "latest"` (the default).
 
 ---
 
