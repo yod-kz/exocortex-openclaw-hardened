@@ -1,13 +1,21 @@
 # Site Configuration Schema
 
-All variables for an openclaw-hardened-site deployment, defined in
-`group_vars/agent_hosts/main.yml` unless otherwise noted.  Role defaults
+All variables for a site deployment, defined in
+`group_vars/agent_hosts/main.yml` unless otherwise noted. Role defaults
 live in `roles/<role>/defaults/main.yml` and are overridden by site config.
 
 > **Important:** Ansible uses shallow dict merge. If you override **any** key
 > in a dict (e.g. `pipelock`), you must include the **entire** dict in your
 > site config. Role defaults only apply when the top-level dict is completely
 > absent from site config.
+
+**See also:**
+[Architecture](architecture.md) |
+[Installation](installation.md) |
+[Operations](operations.md) |
+[Security](security.md) |
+[Site Repo Layout](reference/site-repo-layout.md) |
+[Agents Repo Layout](reference/agents-repo-layout.md)
 
 ---
 
@@ -238,6 +246,21 @@ Docker / gVisor hardening settings.
 | `docker.no_new_privileges` | bool | `true` | Set `no-new-privileges` security option |
 | `docker.log_max_size` | string | `10m` | Max size per log file |
 | `docker.log_max_file` | string | `3` | Max number of rotated log files |
+
+### ollama
+
+Local embedding model server for memory search. Disabled by default.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ollama.enabled` | bool | `false` | Enable Ollama installation and service |
+| `ollama.embedding_model` | string | `nomic-embed-text` | Embedding model to pull (any Ollama-compatible model) |
+| `ollama.host` | string | `127.0.0.1` | Bind address (localhost only — accessed by OpenClaw on same host) |
+| `ollama.port` | int | `11434` | Listen port |
+
+When enabled, the `openclaw_config` template sets `memorySearch.provider: "ollama"`
+for agents with `memory_search: true`. Model pulls use a temporary nftables
+egress rule (same pattern as OpenClaw upgrades).
 
 ### openclaw_agents
 

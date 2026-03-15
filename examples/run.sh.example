@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/site.cfg"
+
+PLATFORM="${SCRIPT_DIR}/${platform_path}"
+
+if [[ ! -d "$PLATFORM" ]]; then
+    echo "ERROR: Platform repo not found at $PLATFORM"
+    echo "Clone it: git clone https://github.com/SentientSwarm/openclaw-hardened.git $PLATFORM"
+    exit 1
+fi
+
+if [[ -n "${platform_version:-}" ]]; then
+    actual=$(git -C "$PLATFORM" describe --tags --always 2>/dev/null || echo "unknown")
+    if [[ "$actual" != "$platform_version" ]]; then
+        echo "WARNING: Expected platform $platform_version, found $actual"
+        echo "Run: cd $PLATFORM && git checkout $platform_version"
+        read -rp "Continue anyway? [y/N] " yn
+        [[ "$yn" =~ ^[Yy] ]] || exit 1
+    fi
+fi
+
+export ANSIBLE_ROLES_PATH="$PLATFORM/roles"
+ansible-playbook -i "$SCRIPT_DIR/inventory" "$PLATFORM/playbook.yml" "$@"

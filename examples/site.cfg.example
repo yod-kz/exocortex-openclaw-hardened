@@ -1,0 +1,5 @@
+# Path to the openclaw-hardened platform repo (relative to this directory)
+platform_path=../openclaw-hardened
+
+# Optional: pin to a specific platform version (git tag or commit)
+# platform_version=v0.2.0
