@@ -38,6 +38,13 @@ host produces the same result as running it on an existing one.
 The following diagram shows the six layers and how traffic passes through
 them. Detailed descriptions follow.
 
+For host-enforced gateway/untrusted VM deployments, Pipelock and Locksmith
+move outside the VMs and run as host services. The host firewall then makes
+Pipelock mandatory for VM egress and blocks the untrusted VM from reaching
+Locksmith. See
+[Host-Side Pipelock and Locksmith](host-side-pipelock-locksmith.md) for the
+target architecture and clean install sequence.
+
 ```
                                 Internet
                                     |

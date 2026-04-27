@@ -156,6 +156,7 @@ Docker runtime; mitigation details are documented in
 ## Documentation
 
 - [Architecture](docs/architecture.md) -- System design and security model
+- [Host-Side Pipelock and Locksmith](docs/host-side-pipelock-locksmith.md) -- Target architecture for host-enforced gateway/untrusted VM deployments
 - [Installation](docs/installation.md) -- Detailed setup walkthrough
 - [Operations](docs/operations.md) -- Day-to-day management, upgrades, troubleshooting
 - [Security](docs/security.md) -- Threat model, layer details, sandbox mitigations
