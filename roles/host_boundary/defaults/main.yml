@@ -43,6 +43,10 @@ _host_boundary_defaults:
     gateway: ""
     untrusted: ""
     untrusted_default_gateway: ""
+    # Extra VM source addresses that must be blocked from direct egress but are
+    # not trusted service identities. Useful when the VM runtime exposes a
+    # shared NAT source for internet-bound traffic.
+    extra_direct_egress_sources: []
 
   pipelock:
     enabled: true
@@ -104,11 +108,21 @@ _host_boundary_defaults:
     config_path: "/usr/local/etc/openclaw-boundary/locksmith.yaml"
     wrapper_path: "/usr/local/etc/openclaw-boundary/locksmith-env.sh"
     plist_path: "/Library/LaunchDaemons/com.exocortex.openclaw.locksmith.plist"
-    listen_host: "0.0.0.0"
-    listen_port: 9200
+    listen_host: "127.0.0.1"
+    listen_port: 9201
     user: ""
     manage_launchd: true
-    health_url: "http://127.0.0.1:9200/health"
+    health_url: "http://127.0.0.1:9201/health"
+    bridge:
+      enabled: true
+      label: "com.exocortex.openclaw.locksmith-bridge"
+      binary_path: "/usr/local/bin/socat"
+      plist_path: "/Library/LaunchDaemons/com.exocortex.openclaw.locksmith-bridge.plist"
+      listen_host: "0.0.0.0"
+      listen_port: 9200
+      target_host: "127.0.0.1"
+      target_port: 9201
+      manage_launchd: true
 
   pf:
     enabled: true
@@ -117,6 +131,11 @@ _host_boundary_defaults:
     pf_conf: "/etc/pf.conf"
     install_include: true
     reload: true
+    cleanup_legacy_anchors: true
+    legacy_anchor_names:
+      - "openclaw-lima-egress"
+    legacy_anchor_files:
+      - "/etc/pf.anchors/openclaw-lima-egress"
     # Host-forwarded gateway/API ports must not be reachable from untrusted.
     gateway_api_host_ports: [18789, 18790, 29789, 29790, 39789, 39790]
     # Host-forwarded untrusted SSH port(s) used by gateway task dispatch. Leave
@@ -124,8 +143,11 @@ _host_boundary_defaults:
     task_transport_host_ports: []
     auto_allow_untrusted_ssh: false
 
+  application_firewall:
+    allow_listener_binaries: true
+
   verify:
     enabled: true
-    guest_host_alias: "host.lima.internal"
+    guest_host_alias: "192.168.64.1"
     internet_probe_url: "https://api.github.com/zen"
     timeout_seconds: 8

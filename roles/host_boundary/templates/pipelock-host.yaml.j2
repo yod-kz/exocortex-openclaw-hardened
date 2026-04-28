@@ -2,6 +2,7 @@
 version: 1
 mode: {{ host_boundary_effective.pipelock.mode | default(pipelock.mode | default('balanced')) }}
 enforce: {{ host_boundary_effective.pipelock.enforce | default(pipelock.enforce | default(true)) | to_json }}
+explain_blocks: {{ host_boundary_effective.pipelock.explain_blocks | default(false) | to_json }}
 
 api_allowlist:
 {% set _api_allowlist = (host_boundary_effective.pipelock.api_allowlist | default(pipelock.api_allowlist | default([]))) + (host_boundary_effective.pipelock.api_allowlist_extra | default(pipelock.api_allowlist_extra | default([]))) %}
@@ -11,34 +12,49 @@ api_allowlist:
 
 fetch_proxy:
   listen: "{{ host_boundary_effective.pipelock.listen }}"
-  timeout_seconds: {{ host_boundary_effective.pipelock.timeout_seconds | default(30) }}
-  max_response_mb: {{ host_boundary_effective.pipelock.max_response_mb | default(10) }}
+  timeout_seconds: {{ host_boundary_effective.pipelock.timeout_seconds | default(60) }}
+  max_response_mb: {{ host_boundary_effective.pipelock.max_response_mb | default(50) }}
+  user_agent: "{{ host_boundary_effective.pipelock.user_agent | default('Pipelock Fetch/1.0') }}"
+  monitoring:
+    entropy_threshold: {{ host_boundary_effective.pipelock.monitoring.entropy_threshold | default(pipelock.monitoring.entropy_threshold | default(5.5)) }}
+    subdomain_entropy_threshold: {{ host_boundary_effective.pipelock.monitoring.subdomain_entropy_threshold | default(4.0) }}
+    max_url_length: {{ host_boundary_effective.pipelock.monitoring.max_url_length | default(pipelock.monitoring.max_url_length | default(4096)) }}
+    max_requests_per_minute: {{ host_boundary_effective.pipelock.monitoring.max_requests_per_minute | default(pipelock.monitoring.max_requests_per_minute | default(300)) }}
+    blocklist:
+{% set _blocklist = host_boundary_effective.pipelock.blocklist | default(pipelock.blocklist | default([])) %}
+{% for domain in _blocklist %}
+      - "{{ domain }}"
+{% endfor %}
+    subdomain_entropy_exclusions:
+      - "api.telegram.org"
+      - "*.githubusercontent.com"
 
 forward_proxy:
   enabled: true
-  max_tunnel_seconds: {{ host_boundary_effective.pipelock.max_tunnel_seconds | default(300) }}
-  idle_timeout_seconds: {{ host_boundary_effective.pipelock.idle_timeout_seconds | default(120) }}
+  max_tunnel_seconds: {{ host_boundary_effective.pipelock.max_tunnel_seconds | default(900) }}
+  idle_timeout_seconds: {{ host_boundary_effective.pipelock.idle_timeout_seconds | default(180) }}
   sni_verification: {{ host_boundary_effective.pipelock.forward_proxy.sni_verification | default(pipelock.forward_proxy.sni_verification | default(true)) | to_json }}
 
-monitoring:
-  entropy_threshold: {{ host_boundary_effective.pipelock.monitoring.entropy_threshold | default(pipelock.monitoring.entropy_threshold | default(4.5)) }}
-  max_url_length: {{ host_boundary_effective.pipelock.monitoring.max_url_length | default(pipelock.monitoring.max_url_length | default(2048)) }}
-  max_requests_per_minute: {{ host_boundary_effective.pipelock.monitoring.max_requests_per_minute | default(pipelock.monitoring.max_requests_per_minute | default(60)) }}
-
-blocklist:
-{% set _blocklist = host_boundary_effective.pipelock.blocklist | default(pipelock.blocklist | default([])) %}
-{% for domain in _blocklist %}
-  - "{{ domain }}"
-{% endfor %}
+request_body_scanning:
+  enabled: {{ host_boundary_effective.pipelock.request_body_scanning.enabled | default(true) | to_json }}
+  action: "{{ host_boundary_effective.pipelock.request_body_scanning.action | default('warn') }}"
+  max_body_bytes: {{ host_boundary_effective.pipelock.request_body_scanning.max_body_bytes | default(5242880) }}
+  scan_headers: {{ host_boundary_effective.pipelock.request_body_scanning.scan_headers | default(true) | to_json }}
+  header_mode: "{{ host_boundary_effective.pipelock.request_body_scanning.header_mode | default('sensitive') }}"
+  sensitive_headers:
+    - "Authorization"
+    - "Cookie"
+    - "X-Api-Key"
+    - "X-Token"
+    - "Proxy-Authorization"
+    - "X-Goog-Api-Key"
 
 dlp:
   scan_env: {{ host_boundary_effective.pipelock.dlp.scan_env | default(pipelock.dlp.scan_env | default(false)) | to_json }}
-  secret_patterns: {{ host_boundary_effective.pipelock.dlp.secret_patterns | default(pipelock.dlp.secret_patterns | default(true)) | to_json }}
-  entropy_analysis: {{ host_boundary_effective.pipelock.dlp.entropy_analysis | default(pipelock.dlp.entropy_analysis | default(true)) | to_json }}
+  include_defaults: {{ host_boundary_effective.pipelock.dlp.include_defaults | default(true) | to_json }}
 
-tool_chain_detection:
-  enabled: {{ host_boundary_effective.pipelock.tool_chain_detection.enabled | default(pipelock.tool_chain_detection.enabled | default(true)) | to_json }}
-  action: {{ host_boundary_effective.pipelock.tool_chain_detection.action | default(pipelock.tool_chain_detection.action | default('warn')) }}
-  window_size: {{ host_boundary_effective.pipelock.tool_chain_detection.window_size | default(pipelock.tool_chain_detection.window_size | default(20)) }}
-  window_seconds: {{ host_boundary_effective.pipelock.tool_chain_detection.window_seconds | default(pipelock.tool_chain_detection.window_seconds | default(300)) }}
-  max_gap: {{ host_boundary_effective.pipelock.tool_chain_detection.max_gap | default(pipelock.tool_chain_detection.max_gap | default(3)) }}
+logging:
+  format: "{{ host_boundary_effective.pipelock.logging.format | default('json') }}"
+  output: "{{ host_boundary_effective.pipelock.logging.output | default('stdout') }}"
+  include_allowed: {{ host_boundary_effective.pipelock.logging.include_allowed | default(false) | to_json }}
+  include_blocked: {{ host_boundary_effective.pipelock.logging.include_blocked | default(true) | to_json }}

@@ -14,6 +14,13 @@ host_boundary:
     gateway_instance: "openclaw-gateway"
     untrusted_instance: "openclaw-untrusted"
 
+  vm_ips:
+    # Leave blank for discovery, or set explicitly for stable installs.
+    gateway: ""
+    untrusted: ""
+    untrusted_default_gateway: ""
+    extra_direct_egress_sources: []
+
   pipelock:
     enabled: true
     binary_path: "/usr/local/bin/pipelock"
@@ -23,19 +30,37 @@ host_boundary:
   locksmith:
     enabled: true
     binary_path: "/usr/local/bin/locksmith"
-    listen_host: "0.0.0.0"
-    listen_port: 9200
+    # Keep the Locksmith process loopback-only and expose the VM-facing port
+    # through a PF-gated bridge. This avoids direct non-loopback listener
+    # behavior differences across macOS firewall/network stacks.
+    listen_host: "127.0.0.1"
+    listen_port: 9201
     manage_launchd: true
+    health_url: "http://127.0.0.1:9201/health"
+    bridge:
+      enabled: true
+      binary_path: "/usr/local/bin/socat"
+      listen_host: "0.0.0.0"
+      listen_port: 9200
+      target_host: "127.0.0.1"
+      target_port: 9201
+      manage_launchd: true
 
   pf:
     enabled: true
     reload: true
+    cleanup_legacy_anchors: true
     # Add the untrusted VM's Lima SSHLocalPort here when gateway -> untrusted
     # task dispatch uses a host-forwarded SSH path. Set auto_allow_untrusted_ssh
     # to true only when the role should discover and allow Lima SSHLocalPort.
     task_transport_host_ports: []
     auto_allow_untrusted_ssh: false
 
+  application_firewall:
+    allow_listener_binaries: true
+
   verify:
     enabled: true
-    guest_host_alias: "host.lima.internal"
+    # Use the bridge address when PF must distinguish gateway and untrusted VM
+    # source identities. `host.lima.internal` can traverse shared NAT.
+    guest_host_alias: "192.168.64.1"

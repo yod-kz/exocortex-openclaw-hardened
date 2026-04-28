@@ -6,6 +6,7 @@
     fail_msg: "host_boundary.platform=darwin_pf must run on a macOS host."
 
 - name: Check limactl is available
+  become: false
   command: limactl --version
   changed_when: false
   when: host_boundary_effective.lima.enabled | default(true)
@@ -44,6 +45,15 @@
     - host_boundary_effective.locksmith.enabled | default(true)
     - host_boundary_effective.locksmith.manage_launchd | default(true)
 
+- name: Check host Locksmith bridge binary
+  stat:
+    path: "{{ host_boundary_effective.locksmith.bridge.binary_path }}"
+  register: _host_boundary_locksmith_bridge_binary
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.bridge.enabled | default(false)
+    - host_boundary_effective.locksmith.bridge.manage_launchd | default(true)
+
 - name: Require host Pipelock binary before managing LaunchDaemon
   assert:
     that:
@@ -62,6 +72,26 @@
     - host_boundary_effective.locksmith.enabled | default(true)
     - host_boundary_effective.locksmith.manage_launchd | default(true)
 
+- name: Require host Locksmith bridge binary before managing LaunchDaemon
+  assert:
+    that:
+      - _host_boundary_locksmith_bridge_binary.stat.exists
+    fail_msg: "Locksmith bridge binary not found at {{ host_boundary_effective.locksmith.bridge.binary_path }}. Install socat or set host_boundary.locksmith.bridge.binary_path before enabling the bridge."
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.bridge.enabled | default(false)
+    - host_boundary_effective.locksmith.bridge.manage_launchd | default(true)
+
+- name: Require Locksmith bridge to use a distinct local listener
+  assert:
+    that:
+      - host_boundary_effective.locksmith.listen_port != host_boundary_effective.locksmith.bridge.listen_port
+        or host_boundary_effective.locksmith.listen_host not in ['0.0.0.0', '::', host_boundary_effective.locksmith.bridge.listen_host]
+    fail_msg: "Locksmith bridge would conflict with the Locksmith listener. Use a loopback-only Locksmith port and expose the bridge on the public Locksmith port."
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.bridge.enabled | default(false)
+
 - name: Require PF when host services use wildcard binds
   assert:
     that:
@@ -75,6 +105,58 @@
       or
       (host_boundary_effective.locksmith.enabled | default(true)
         and (host_boundary_effective.locksmith.listen_host | default('') in ['0.0.0.0', '::']))
+      or
+      (host_boundary_effective.locksmith.enabled | default(true)
+        and host_boundary_effective.locksmith.bridge.enabled | default(false)
+        and (host_boundary_effective.locksmith.bridge.listen_host | default('') in ['0.0.0.0', '::']))
+
+- name: Resolve macOS Application Firewall listener binaries
+  set_fact:
+    host_boundary_application_firewall_binaries: >-
+      {{
+        (
+          ([host_boundary_effective.pipelock.binary_path]
+            if (host_boundary_effective.pipelock.enabled | default(true)
+              and host_boundary_effective.pipelock.manage_launchd | default(true))
+            else [])
+          + ([host_boundary_effective.locksmith.binary_path]
+            if (host_boundary_effective.locksmith.enabled | default(true)
+              and host_boundary_effective.locksmith.manage_launchd | default(true))
+            else [])
+          + ([host_boundary_effective.locksmith.bridge.binary_path]
+            if (host_boundary_effective.locksmith.enabled | default(true)
+              and host_boundary_effective.locksmith.bridge.enabled | default(false)
+              and host_boundary_effective.locksmith.bridge.manage_launchd | default(true))
+            else [])
+        ) | unique | list
+      }}
+  when: host_boundary_effective.application_firewall.allow_listener_binaries | default(true)
+
+- name: Add host listener binaries to macOS Application Firewall
+  become: true
+  command:
+    argv:
+      - /usr/libexec/ApplicationFirewall/socketfilterfw
+      - --add
+      - "{{ item }}"
+  loop: "{{ host_boundary_application_firewall_binaries | default([]) }}"
+  changed_when: false
+  when:
+    - host_boundary_effective.application_firewall.allow_listener_binaries | default(true)
+    - host_boundary_application_firewall_binaries | default([]) | length > 0
+
+- name: Unblock host listener binaries in macOS Application Firewall
+  become: true
+  command:
+    argv:
+      - /usr/libexec/ApplicationFirewall/socketfilterfw
+      - --unblockapp
+      - "{{ item }}"
+  loop: "{{ host_boundary_application_firewall_binaries | default([]) }}"
+  changed_when: false
+  when:
+    - host_boundary_effective.application_firewall.allow_listener_binaries | default(true)
+    - host_boundary_application_firewall_binaries | default([]) | length > 0
 
 - name: Render Lima topology configs
   include_tasks: lima.yml
@@ -83,6 +165,7 @@
     - host_boundary_effective.lima.manage | default(false)
 
 - name: Check gateway Lima VM status
+  become: false
   command:
     argv:
       - limactl
@@ -109,6 +192,7 @@
     - _host_boundary_gateway_status is not skipped
 
 - name: Check untrusted Lima VM status
+  become: false
   command:
     argv:
       - limactl
@@ -140,6 +224,7 @@
     - _host_boundary_untrusted_status is not skipped
 
 - name: Discover gateway VM source IP
+  become: false
   command:
     argv:
       - limactl
@@ -156,6 +241,7 @@
     - (host_boundary_effective.vm_ips.gateway | default('')) == ''
 
 - name: Discover untrusted VM source IP
+  become: false
   command:
     argv:
       - limactl
@@ -172,6 +258,7 @@
     - (host_boundary_effective.vm_ips.untrusted | default('')) == ''
 
 - name: Discover untrusted VM default gateway
+  become: false
   command:
     argv:
       - limactl
@@ -188,6 +275,7 @@
     - (host_boundary_effective.vm_ips.untrusted_default_gateway | default('')) == ''
 
 - name: Discover untrusted Lima SSH host port
+  become: false
   command:
     argv:
       - limactl
@@ -208,7 +296,7 @@
     host_boundary_untrusted_ip: "{{ host_boundary_effective.vm_ips.untrusted | default('') | ternary(host_boundary_effective.vm_ips.untrusted, _host_boundary_untrusted_ip.stdout | default('') | trim) }}"
     host_boundary_untrusted_default_gateway: "{{ host_boundary_effective.vm_ips.untrusted_default_gateway | default('') | ternary(host_boundary_effective.vm_ips.untrusted_default_gateway, _host_boundary_untrusted_default_gateway.stdout | default('') | trim) }}"
     host_boundary_pipelock_port: "{{ host_boundary_effective.pipelock.listen.split(':')[-1] }}"
-    host_boundary_locksmith_port: "{{ host_boundary_effective.locksmith.listen_port | string }}"
+    host_boundary_locksmith_port: "{{ (host_boundary_effective.locksmith.bridge.enabled | default(false)) | ternary(host_boundary_effective.locksmith.bridge.listen_port, host_boundary_effective.locksmith.listen_port) | string }}"
     host_boundary_task_transport_ports: >-
       {{
         (host_boundary_effective.pf.task_transport_host_ports | default([]))
@@ -287,6 +375,20 @@
     - host_boundary_effective.locksmith.enabled | default(true)
     - host_boundary_effective.locksmith.manage_launchd | default(true)
 
+- name: Render Locksmith bridge LaunchDaemon
+  become: true
+  template:
+    src: locksmith-bridge.plist.j2
+    dest: "{{ host_boundary_effective.locksmith.bridge.plist_path }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: reload host locksmith bridge launchdaemon
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.bridge.enabled | default(false)
+    - host_boundary_effective.locksmith.bridge.manage_launchd | default(true)
+
 - name: Render host PF anchor
   become: true
   template:
@@ -311,6 +413,30 @@
   when:
     - host_boundary_effective.pf.enabled | default(true)
     - host_boundary_effective.pf.install_include | default(true)
+
+- name: Remove legacy OpenClaw PF anchor includes
+  become: true
+  lineinfile:
+    path: "{{ host_boundary_effective.pf.pf_conf }}"
+    regexp: '^\s*(anchor|load\s+anchor)\s+"{{ item }}"(\s|$)'
+    state: absent
+    backup: true
+  loop: "{{ host_boundary_effective.pf.legacy_anchor_names | default([]) }}"
+  notify: reload host pf
+  when:
+    - host_boundary_effective.pf.enabled | default(true)
+    - host_boundary_effective.pf.cleanup_legacy_anchors | default(true)
+
+- name: Remove legacy OpenClaw PF anchor files
+  become: true
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ host_boundary_effective.pf.legacy_anchor_files | default([]) }}"
+  notify: reload host pf
+  when:
+    - host_boundary_effective.pf.enabled | default(true)
+    - host_boundary_effective.pf.cleanup_legacy_anchors | default(true)
 
 - name: Flush host boundary handlers before verification
   meta: flush_handlers

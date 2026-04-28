@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ host_boundary_effective.locksmith.bridge.label }}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ host_boundary_effective.locksmith.bridge.binary_path }}</string>
+    <string>-d</string>
+    <string>-d</string>
+    <string>TCP4-LISTEN:{{ host_boundary_effective.locksmith.bridge.listen_port }},bind={{ host_boundary_effective.locksmith.bridge.listen_host }},fork,reuseaddr</string>
+    <string>TCP4:{{ host_boundary_effective.locksmith.bridge.target_host }}:{{ host_boundary_effective.locksmith.bridge.target_port }}</string>
+  </array>
+  <key>KeepAlive</key>
+  <true/>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{{ host_boundary_effective.log_dir }}/locksmith-bridge.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ host_boundary_effective.log_dir }}/locksmith-bridge.err.log</string>
+</dict>
+</plist>

@@ -113,8 +113,9 @@ Denied:
 The host firewall is the authoritative control. Proxy environment variables
 inside a VM are only ergonomic hints.
 
-On macOS development hosts, this means PF anchors. On Linux hosts, this means
-nftables. The conceptual policy is the same:
+On macOS development hosts, this means PF anchors plus macOS Application
+Firewall allowlisting for the host listener binaries. On Linux hosts, this
+means nftables. The conceptual policy is the same:
 
 ```text
 allow host loopback
@@ -139,6 +140,37 @@ block all other egress by default
 
 If Pipelock is down, both VMs should lose public internet access. That is the
 correct failure mode.
+
+### macOS VZ and Lima Notes
+
+Apple VZ/Lima exposes multiple useful paths:
+
+- `192.168.64.1` is the host bridge address. Use this for enforced host
+  services because PF can distinguish gateway and untrusted VM source IPs.
+- `host.lima.internal` normally traverses Lima's shared NAT path. It is useful
+  for host-forwarded task transports such as SSH, but both VMs may appear as a
+  shared source there. Do not use that path for privileged boundary decisions.
+- Existing experiments may have left an `openclaw-lima-egress` PF anchor. The
+  host-boundary role removes that legacy anchor because its quick rules can
+  shadow the host-owned policy.
+- The macOS Application Firewall can allow a TCP handshake while preventing an
+  unsigned/new listener from reading application data. The role allowlists the
+  managed Pipelock, Locksmith, and Locksmith bridge binaries instead of
+  disabling the firewall.
+
+OpenClaw's required-Locksmith startup guard currently expects a loopback
+Locksmith URL. For a host-side Locksmith deployment, keep the OpenClaw plugin
+URL as `http://127.0.0.1:9200` inside the gateway VM and run a tiny
+gateway-local loopback forward to the host bridge endpoint:
+
+```text
+gateway OpenClaw -> 127.0.0.1:9200
+127.0.0.1:9200 -> 192.168.64.1:9200
+192.168.64.1:9200 -> host Locksmith bridge -> 127.0.0.1:9201
+```
+
+This preserves OpenClaw's loopback guard while the actual credential boundary
+and network enforcement remain host-owned.
 
 ## Credential Boundary
 
@@ -241,7 +273,9 @@ untrusted VMs when their network shape or trust material is stale.
 
 5. Gateway configuration:
    - Install or update OpenClaw.
-   - Render OpenClaw config with host Locksmith URL and required flag.
+   - Render OpenClaw config with required Locksmith enabled. On current
+     OpenClaw, render a gateway-local loopback Locksmith URL and forward that
+     loopback port to the host Locksmith endpoint.
    - Render Pipelock proxy settings for non-credential egress.
    - Render agent profiles and subagent routing.
    - Restart OpenClaw.
@@ -310,6 +344,11 @@ verification phase checks that the resulting PF anchor is loaded and that
 untrusted cannot reach Locksmith while both VMs can use Pipelock. If a future
 Lima networking mode hides guest source IPs from PF, switch the VM templates to
 a PF-visible network such as socket_vmnet before relying on this boundary.
+
+Some Lima topologies expose a second shared NAT source for default internet
+egress. Put those addresses in
+`host_boundary.vm_ips.extra_direct_egress_sources`; the PF anchor blocks them
+from direct egress without treating them as trusted service identities.
 
 ### OpenClaw Compatibility
 

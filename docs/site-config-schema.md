@@ -166,13 +166,23 @@ Host-owned gateway/untrusted VM boundary. These variables live under
 | `host_boundary.lima.untrusted_instance` | string | `openclaw-untrusted` | Untrusted worker VM name |
 | `host_boundary.vm_ips.gateway` | string | `""` | Override gateway VM source IP; blank means discover with `limactl shell` |
 | `host_boundary.vm_ips.untrusted` | string | `""` | Override untrusted VM source IP; blank means discover with `limactl shell` |
+| `host_boundary.vm_ips.extra_direct_egress_sources` | list of string | `[]` | Additional VM/NAT source IPs to block from direct egress without granting service access |
 | `host_boundary.pipelock.listen` | string | `0.0.0.0:8888` | Host Pipelock listen address for VM access |
-| `host_boundary.locksmith.listen_host` | string | `0.0.0.0` | Host Locksmith bind address for gateway access |
-| `host_boundary.locksmith.listen_port` | int | `9200` | Host Locksmith port |
+| `host_boundary.locksmith.listen_host` | string | `127.0.0.1` | Host Locksmith bind address. Default keeps Locksmith loopback-only behind the bridge |
+| `host_boundary.locksmith.listen_port` | int | `9201` | Host Locksmith private loopback port |
+| `host_boundary.locksmith.bridge.enabled` | bool | `true` | Expose a PF-gated VM-facing Locksmith port through `socat` |
+| `host_boundary.locksmith.bridge.binary_path` | string | `/usr/local/bin/socat` | Bridge binary path |
+| `host_boundary.locksmith.bridge.listen_host` | string | `0.0.0.0` | Bridge bind address. PF restricts source access |
+| `host_boundary.locksmith.bridge.listen_port` | int | `9200` | VM-facing Locksmith port |
+| `host_boundary.locksmith.bridge.target_host` | string | `127.0.0.1` | Bridge target host |
+| `host_boundary.locksmith.bridge.target_port` | int | `9201` | Bridge target port |
 | `host_boundary.pf.anchor_name` | string | `openclaw-host-boundary` | PF anchor name |
+| `host_boundary.pf.cleanup_legacy_anchors` | bool | `true` | Remove older OpenClaw PF anchors that can shadow host-boundary rules |
 | `host_boundary.pf.task_transport_host_ports` | list of int | `[]` | Host-forwarded ports that gateway may use for task dispatch, such as untrusted SSH |
 | `host_boundary.pf.auto_allow_untrusted_ssh` | bool | `false` | When task transport ports are empty, discover the untrusted Lima SSHLocalPort and allow gateway access to it |
+| `host_boundary.application_firewall.allow_listener_binaries` | bool | `true` | Add managed host listener binaries to the macOS Application Firewall allowlist |
 | `host_boundary.verify.enabled` | bool | `true` | Run positive and negative boundary checks after install |
+| `host_boundary.verify.guest_host_alias` | string | `192.168.64.1` | Host address guests use for verified Pipelock/Locksmith access; prefer the bridge address over `host.lima.internal` when PF must distinguish VMs |
 
 ### llamafirewall
 

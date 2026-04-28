@@ -29,6 +29,22 @@
     - host_boundary_effective.locksmith.enabled | default(true)
     - host_boundary_effective.locksmith.manage_launchd | default(true)
 
+- name: reload host locksmith bridge launchdaemon
+  become: true
+  shell: |
+    set -euo pipefail
+    launchctl bootout system "{{ host_boundary_effective.locksmith.bridge.plist_path }}" >/dev/null 2>&1 || true
+    launchctl bootstrap system "{{ host_boundary_effective.locksmith.bridge.plist_path }}"
+    launchctl enable "system/{{ host_boundary_effective.locksmith.bridge.label }}"
+    launchctl kickstart -k "system/{{ host_boundary_effective.locksmith.bridge.label }}"
+  args:
+    executable: /bin/bash
+  when:
+    - host_boundary_effective.platform == "darwin_pf"
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.bridge.enabled | default(false)
+    - host_boundary_effective.locksmith.bridge.manage_launchd | default(true)
+
 - name: reload host pf
   become: true
   shell: |
