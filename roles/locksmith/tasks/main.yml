@@ -6,16 +6,21 @@
     create_home: false
     shell: /usr/sbin/nologin
 
-- name: Create locksmith directories
+- name: Create locksmith config directory
   file:
-    path: "{{ item }}"
+    path: /etc/locksmith
+    state: directory
+    owner: root
+    group: locksmith
+    mode: "0750"
+
+- name: Create locksmith log directory
+  file:
+    path: /var/log/locksmith
     state: directory
     owner: locksmith
     group: locksmith
-    mode: "0755"
-  loop:
-    - /etc/locksmith
-    - /var/log/locksmith
+    mode: "0750"
 
 - name: Check if locksmith binary exists
   stat:
@@ -49,6 +54,16 @@
     group: locksmith
     mode: "0640"
   notify: restart locksmith
+
+- name: Write locksmith service environment
+  template:
+    src: locksmith.env.j2
+    dest: /etc/locksmith/locksmith.env
+    owner: root
+    group: locksmith
+    mode: "0640"
+  notify: restart locksmith
+  no_log: true
 
 - name: Write locksmith systemd service
   template:
@@ -86,6 +101,7 @@
     return_content: true
   register: locksmith_tools
   when: locksmith.inbound_token | default('') != ''
+  no_log: true
 
 - name: Report active tools
   debug:

@@ -1,0 +1,65 @@
+minimumLimaVersion: "2.0.0"
+
+base:
+  - template:_images/ubuntu
+
+vmType: vz
+arch: aarch64
+cpus: {{ host_boundary_effective.lima.untrusted.cpus }}
+memory: "{{ host_boundary_effective.lima.untrusted.memory }}"
+disk: "{{ host_boundary_effective.lima.untrusted.disk }}"
+
+containerd:
+  system: false
+  user: false
+
+hostResolver:
+  enabled: true
+
+networks:
+  - vzNAT: true
+
+env:
+  OPENCLAW_VM_ROLE: untrusted
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y \
+        ca-certificates \
+        curl \
+        dnsutils \
+        git \
+        iproute2 \
+        iptables \
+        jq \
+        net-tools \
+        nftables \
+        openssh-server \
+        python3 \
+        socat \
+        tcpdump
+      systemctl enable --now ssh
+
+message: |
+  {{ host_boundary_effective.lima.untrusted_instance }} is the isolated untrusted worker VM.
+  No host directories are mounted into this guest.
+  It must use host Pipelock for public egress and must not reach Locksmith.
+
+portForwards:
+  - guestPort: {{ host_boundary_effective.lima.untrusted.gateway_port }}
+    hostIP: "127.0.0.1"
+    hostPort: {{ host_boundary_effective.lima.untrusted.host_gateway_port }}
+  - guestPort: {{ host_boundary_effective.lima.untrusted.control_ui_port }}
+    hostIP: "127.0.0.1"
+    hostPort: {{ host_boundary_effective.lima.untrusted.host_control_ui_port }}
+  - guestIP: "127.0.0.1"
+    guestPortRange: [1, 65535]
+    hostIP: "127.0.0.1"
+    hostPortRange: [1, 65535]
+    proto: any
+    ignore: true

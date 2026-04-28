@@ -16,17 +16,7 @@ ExecStart={{ final_openclaw_binary }} gateway
 Restart=always
 RestartSec=5
 
-# TLS: self-signed certs on local inference endpoints
-{% if inference.endpoints | selectattr('tls_skip_verify', 'equalto', true) | list | length > 0 %}
-Environment=NODE_TLS_REJECT_UNAUTHORIZED=0
-{% endif %}
-
-# Egress proxy (Pipelock) — required for Telegram, cloud APIs
-# Node.js needs --use-env-proxy to honor HTTP_PROXY/HTTPS_PROXY
-Environment=NODE_OPTIONS=--use-env-proxy
-Environment=HTTP_PROXY=http://127.0.0.1:{{ pipelock.listen.split(':')[1] }}
-Environment=HTTPS_PROXY=http://127.0.0.1:{{ pipelock.listen.split(':')[1] }}
-Environment=NO_PROXY=localhost,127.0.0.1,172.17.0.1,{{ network.allowed_lan_ips | map(attribute='ip') | join(',') }}
+EnvironmentFile=/etc/openclaw/openclaw.env
 
 # Hardening
 NoNewPrivileges=true

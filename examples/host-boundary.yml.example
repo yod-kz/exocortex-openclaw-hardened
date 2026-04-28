@@ -1,0 +1,41 @@
+# Copy relevant keys into inventory/group_vars/host_boundary/main.yml for the
+# host-side gateway/untrusted VM boundary playbook.
+
+host_boundary:
+  enabled: true
+  platform: "darwin_pf"
+
+  # Set manage: true for clean installs that should render/start Lima VMs.
+  # Leave false when iterating against existing VMs.
+  lima:
+    enabled: true
+    manage: false
+    recreate: false
+    gateway_instance: "openclaw-gateway"
+    untrusted_instance: "openclaw-untrusted"
+
+  pipelock:
+    enabled: true
+    binary_path: "/usr/local/bin/pipelock"
+    listen: "0.0.0.0:8888"
+    manage_launchd: true
+
+  locksmith:
+    enabled: true
+    binary_path: "/usr/local/bin/locksmith"
+    listen_host: "0.0.0.0"
+    listen_port: 9200
+    manage_launchd: true
+
+  pf:
+    enabled: true
+    reload: true
+    # Add the untrusted VM's Lima SSHLocalPort here when gateway -> untrusted
+    # task dispatch uses a host-forwarded SSH path. Set auto_allow_untrusted_ssh
+    # to true only when the role should discover and allow Lima SSHLocalPort.
+    task_transport_host_ports: []
+    auto_allow_untrusted_ssh: false
+
+  verify:
+    enabled: true
+    guest_host_alias: "host.lima.internal"

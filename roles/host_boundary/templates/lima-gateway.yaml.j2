@@ -1,0 +1,66 @@
+minimumLimaVersion: "2.0.0"
+
+base:
+  - template:_images/ubuntu
+  - template:_default/mounts
+
+vmType: vz
+arch: aarch64
+cpus: {{ host_boundary_effective.lima.gateway.cpus }}
+memory: "{{ host_boundary_effective.lima.gateway.memory }}"
+disk: "{{ host_boundary_effective.lima.gateway.disk }}"
+mountType: virtiofs
+
+containerd:
+  system: false
+  user: false
+
+hostResolver:
+  enabled: true
+
+networks:
+  - vzNAT: true
+
+env:
+  OPENCLAW_VM_ROLE: gateway
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y \
+        ca-certificates \
+        curl \
+        dnsutils \
+        git \
+        iproute2 \
+        iptables \
+        jq \
+        net-tools \
+        nftables \
+        openssh-client \
+        python3 \
+        socat \
+        tcpdump
+
+message: |
+  {{ host_boundary_effective.lima.gateway_instance }} is the trusted OpenClaw gateway VM.
+  Host Pipelock and Locksmith are owned by the host boundary role, not this VM.
+  Gateway API/UI forwards are host-loopback only.
+
+portForwards:
+  - guestPort: {{ host_boundary_effective.lima.gateway.gateway_port }}
+    hostIP: "127.0.0.1"
+    hostPort: {{ host_boundary_effective.lima.gateway.host_gateway_port }}
+  - guestPort: {{ host_boundary_effective.lima.gateway.control_ui_port }}
+    hostIP: "127.0.0.1"
+    hostPort: {{ host_boundary_effective.lima.gateway.host_control_ui_port }}
+  - guestIP: "127.0.0.1"
+    guestPortRange: [1, 65535]
+    hostIP: "127.0.0.1"
+    hostPortRange: [1, 65535]
+    proto: any
+    ignore: true

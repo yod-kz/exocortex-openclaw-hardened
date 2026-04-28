@@ -6,4 +6,11 @@ _locksmith_defaults:
   listen_port: 9200
   log_level: "info"
   inbound_token: ""
+  required: true
+  generic_tool: false
+  catalog_ttl_seconds: 30
+  timeout_seconds: 30
+  max_response_bytes: 262144
+  prompt_catalog: true
+  openclaw_base_url: ""
   tools: []

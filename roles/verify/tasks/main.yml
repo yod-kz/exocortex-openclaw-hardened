@@ -3,7 +3,9 @@
   template:
     src: verify-posture.sh.j2
     dest: /usr/local/bin/verify-posture.sh
-    mode: "0755"
+    owner: root
+    group: root
+    mode: "0700"
 
 - name: Wait for openclaw gateway to be ready
   shell: ss -tlnp | grep -q ':{{ openclaw.gateway_port }}'

@@ -1,0 +1,171 @@
+---
+- name: Verify PF anchor syntax is loaded
+  become: true
+  command:
+    argv:
+      - pfctl
+      - -a
+      - "{{ host_boundary_effective.pf.anchor_name }}"
+      - -sr
+  register: _host_boundary_pf_rules
+  changed_when: false
+  when: host_boundary_effective.pf.enabled | default(true)
+
+- name: Verify PF anchor contains direct egress blocks
+  assert:
+    that:
+      - _host_boundary_pf_rules.stdout is search('openclaw-gateway-direct-egress-block')
+      - _host_boundary_pf_rules.stdout is search('openclaw-untrusted-direct-egress-block')
+  when: host_boundary_effective.pf.enabled | default(true)
+
+- name: Verify host Pipelock LaunchDaemon is running
+  command:
+    argv:
+      - launchctl
+      - print
+      - "system/{{ host_boundary_effective.pipelock.label }}"
+  register: _host_boundary_pipelock_launchctl
+  changed_when: false
+  when:
+    - host_boundary_effective.pipelock.enabled | default(true)
+    - host_boundary_effective.pipelock.manage_launchd | default(true)
+
+- name: Check host Pipelock LaunchDaemon state
+  assert:
+    that:
+      - _host_boundary_pipelock_launchctl.stdout is search('state = running')
+  when:
+    - host_boundary_effective.pipelock.enabled | default(true)
+    - host_boundary_effective.pipelock.manage_launchd | default(true)
+
+- name: Verify host Locksmith LaunchDaemon is running
+  command:
+    argv:
+      - launchctl
+      - print
+      - "system/{{ host_boundary_effective.locksmith.label }}"
+  register: _host_boundary_locksmith_launchctl
+  changed_when: false
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.manage_launchd | default(true)
+
+- name: Check host Locksmith LaunchDaemon state
+  assert:
+    that:
+      - _host_boundary_locksmith_launchctl.stdout is search('state = running')
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.manage_launchd | default(true)
+
+- name: Verify host Pipelock health
+  command:
+    argv:
+      - curl
+      - -fsS
+      - --max-time
+      - "{{ host_boundary_effective.verify.timeout_seconds | string }}"
+      - "{{ host_boundary_effective.pipelock.health_url }}"
+  changed_when: false
+  when: host_boundary_effective.pipelock.enabled | default(true)
+
+- name: Verify host Locksmith health
+  command:
+    argv:
+      - curl
+      - -fsS
+      - --max-time
+      - "{{ host_boundary_effective.verify.timeout_seconds | string }}"
+      - "{{ host_boundary_effective.locksmith.health_url }}"
+  changed_when: false
+  when: host_boundary_effective.locksmith.enabled | default(true)
+
+- name: Verify gateway can reach host Locksmith
+  command:
+    argv:
+      - limactl
+      - shell
+      - "{{ host_boundary_effective.lima.gateway_instance }}"
+      - --
+      - sh
+      - -lc
+      - "curl -fsS --max-time {{ host_boundary_effective.verify.timeout_seconds }} http://{{ host_boundary_effective.verify.guest_host_alias }}:{{ host_boundary_locksmith_port }}/health >/dev/null"
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - host_boundary_effective.locksmith.enabled | default(true)
+
+- name: Verify gateway can reach host Pipelock through proxy
+  command:
+    argv:
+      - limactl
+      - shell
+      - "{{ host_boundary_effective.lima.gateway_instance }}"
+      - --
+      - sh
+      - -lc
+      - "curl -fsS --max-time {{ host_boundary_effective.verify.timeout_seconds }} --proxy http://{{ host_boundary_effective.verify.guest_host_alias }}:{{ host_boundary_pipelock_port }} {{ host_boundary_effective.verify.internet_probe_url }} >/dev/null"
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - host_boundary_effective.pipelock.enabled | default(true)
+
+- name: Verify untrusted can reach host Pipelock through proxy
+  command:
+    argv:
+      - limactl
+      - shell
+      - "{{ host_boundary_effective.lima.untrusted_instance }}"
+      - --
+      - sh
+      - -lc
+      - "curl -fsS --max-time {{ host_boundary_effective.verify.timeout_seconds }} --proxy http://{{ host_boundary_effective.verify.guest_host_alias }}:{{ host_boundary_pipelock_port }} {{ host_boundary_effective.verify.internet_probe_url }} >/dev/null"
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - host_boundary_effective.pipelock.enabled | default(true)
+
+- name: Verify untrusted cannot reach Locksmith
+  command:
+    argv:
+      - limactl
+      - shell
+      - "{{ host_boundary_effective.lima.untrusted_instance }}"
+      - --
+      - sh
+      - -lc
+      - "! curl -fsS --max-time {{ host_boundary_effective.verify.timeout_seconds }} http://{{ host_boundary_effective.verify.guest_host_alias }}:{{ host_boundary_locksmith_port }}/health >/dev/null"
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - host_boundary_effective.locksmith.enabled | default(true)
+
+- name: Verify gateway direct egress is blocked
+  command:
+    argv:
+      - limactl
+      - shell
+      - "{{ host_boundary_effective.lima.gateway_instance }}"
+      - --
+      - sh
+      - -lc
+      - "env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY curl -fsS --connect-timeout 3 --max-time {{ host_boundary_effective.verify.timeout_seconds }} {{ host_boundary_effective.verify.internet_probe_url }} >/dev/null; test $? -ne 0"
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - host_boundary_effective.pf.enabled | default(true)
+
+- name: Verify untrusted direct egress is blocked
+  command:
+    argv:
+      - limactl
+      - shell
+      - "{{ host_boundary_effective.lima.untrusted_instance }}"
+      - --
+      - sh
+      - -lc
+      - "env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY curl -fsS --connect-timeout 3 --max-time {{ host_boundary_effective.verify.timeout_seconds }} {{ host_boundary_effective.verify.internet_probe_url }} >/dev/null; test $? -ne 0"
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - host_boundary_effective.pf.enabled | default(true)

@@ -1,0 +1,68 @@
+---
+- name: Ensure Lima config directory
+  file:
+    path: "{{ host_boundary_effective.lima.config_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Render gateway Lima config
+  template:
+    src: lima-gateway.yaml.j2
+    dest: "{{ host_boundary_effective.lima.config_dir }}/{{ host_boundary_effective.lima.gateway_instance }}.yaml"
+    mode: "0644"
+
+- name: Render untrusted Lima config
+  template:
+    src: lima-untrusted.yaml.j2
+    dest: "{{ host_boundary_effective.lima.config_dir }}/{{ host_boundary_effective.lima.untrusted_instance }}.yaml"
+    mode: "0644"
+
+- name: Delete gateway Lima VM when recreate is requested
+  command: "limactl delete --force {{ host_boundary_effective.lima.gateway_instance }}"
+  changed_when: true
+  failed_when: false
+  when: host_boundary_effective.lima.recreate | default(false)
+
+- name: Delete untrusted Lima VM when recreate is requested
+  command: "limactl delete --force {{ host_boundary_effective.lima.untrusted_instance }}"
+  changed_when: true
+  failed_when: false
+  when: host_boundary_effective.lima.recreate | default(false)
+
+- name: Check gateway Lima instance
+  stat:
+    path: "{{ lookup('env', 'HOME') }}/.lima/{{ host_boundary_effective.lima.gateway_instance }}"
+  register: _host_boundary_gateway_lima_dir
+
+- name: Check untrusted Lima instance
+  stat:
+    path: "{{ lookup('env', 'HOME') }}/.lima/{{ host_boundary_effective.lima.untrusted_instance }}"
+  register: _host_boundary_untrusted_lima_dir
+
+- name: Start existing gateway Lima instance
+  command: "limactl start --tty=false {{ host_boundary_effective.lima.gateway_instance }}"
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.start | default(true)
+    - _host_boundary_gateway_lima_dir.stat.exists
+
+- name: Create gateway Lima instance
+  command: "limactl start --tty=false {{ host_boundary_effective.lima.config_dir }}/{{ host_boundary_effective.lima.gateway_instance }}.yaml"
+  changed_when: true
+  when:
+    - host_boundary_effective.lima.start | default(true)
+    - not _host_boundary_gateway_lima_dir.stat.exists
+
+- name: Start existing untrusted Lima instance
+  command: "limactl start --tty=false {{ host_boundary_effective.lima.untrusted_instance }}"
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.start | default(true)
+    - _host_boundary_untrusted_lima_dir.stat.exists
+
+- name: Create untrusted Lima instance
+  command: "limactl start --tty=false {{ host_boundary_effective.lima.config_dir }}/{{ host_boundary_effective.lima.untrusted_instance }}.yaml"
+  changed_when: true
+  when:
+    - host_boundary_effective.lima.start | default(true)
+    - not _host_boundary_untrusted_lima_dir.stat.exists

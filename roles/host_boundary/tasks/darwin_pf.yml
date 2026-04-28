@@ -1,0 +1,320 @@
+---
+- name: Assert macOS host for darwin_pf boundary
+  assert:
+    that:
+      - ansible_facts["system"] == "Darwin"
+    fail_msg: "host_boundary.platform=darwin_pf must run on a macOS host."
+
+- name: Check limactl is available
+  command: limactl --version
+  changed_when: false
+  when: host_boundary_effective.lima.enabled | default(true)
+
+- name: Ensure host boundary config directory
+  become: true
+  file:
+    path: "{{ host_boundary_effective.config_dir }}"
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0755"
+
+- name: Ensure host boundary log directory
+  become: true
+  file:
+    path: "{{ host_boundary_effective.log_dir }}"
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0750"
+
+- name: Check host Pipelock binary
+  stat:
+    path: "{{ host_boundary_effective.pipelock.binary_path }}"
+  register: _host_boundary_pipelock_binary
+  when:
+    - host_boundary_effective.pipelock.enabled | default(true)
+    - host_boundary_effective.pipelock.manage_launchd | default(true)
+
+- name: Check host Locksmith binary
+  stat:
+    path: "{{ host_boundary_effective.locksmith.binary_path }}"
+  register: _host_boundary_locksmith_binary
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.manage_launchd | default(true)
+
+- name: Require host Pipelock binary before managing LaunchDaemon
+  assert:
+    that:
+      - _host_boundary_pipelock_binary.stat.exists
+    fail_msg: "Pipelock binary not found at {{ host_boundary_effective.pipelock.binary_path }}. Install it or set host_boundary.pipelock.binary_path before enabling manage_launchd."
+  when:
+    - host_boundary_effective.pipelock.enabled | default(true)
+    - host_boundary_effective.pipelock.manage_launchd | default(true)
+
+- name: Require host Locksmith binary before managing LaunchDaemon
+  assert:
+    that:
+      - _host_boundary_locksmith_binary.stat.exists
+    fail_msg: "Locksmith binary not found at {{ host_boundary_effective.locksmith.binary_path }}. Install it or set host_boundary.locksmith.binary_path before enabling manage_launchd."
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.manage_launchd | default(true)
+
+- name: Require PF when host services use wildcard binds
+  assert:
+    that:
+      - host_boundary_effective.pf.enabled | default(true)
+    fail_msg: "Pipelock/Locksmith wildcard binds require host_boundary.pf.enabled=true, or set host_boundary.allow_wildcard_service_bind_without_pf=true for an explicitly unsafe local experiment."
+  when:
+    - not (host_boundary_effective.allow_wildcard_service_bind_without_pf | default(false) | bool)
+    - >
+      (host_boundary_effective.pipelock.enabled | default(true)
+        and (host_boundary_effective.pipelock.listen | default('') is match('^(0\\.0\\.0\\.0|\\[::\\]):')))
+      or
+      (host_boundary_effective.locksmith.enabled | default(true)
+        and (host_boundary_effective.locksmith.listen_host | default('') in ['0.0.0.0', '::']))
+
+- name: Render Lima topology configs
+  include_tasks: lima.yml
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - host_boundary_effective.lima.manage | default(false)
+
+- name: Check gateway Lima VM status
+  command:
+    argv:
+      - limactl
+      - list
+      - "{{ host_boundary_effective.lima.gateway_instance }}"
+      - --format
+      - "{{ '{{.Status}}' }}"
+  register: _host_boundary_gateway_status
+  changed_when: false
+  failed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - >
+      (host_boundary_effective.vm_ips.gateway | default('')) == ''
+      or (host_boundary_effective.verify.enabled | default(true))
+
+- name: Require gateway Lima VM to be running
+  assert:
+    that:
+      - (_host_boundary_gateway_status.stdout | default('') | trim) == 'Running'
+    fail_msg: "Lima instance {{ host_boundary_effective.lima.gateway_instance }} must be Running before host boundary discovery/verification."
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - _host_boundary_gateway_status is not skipped
+
+- name: Check untrusted Lima VM status
+  command:
+    argv:
+      - limactl
+      - list
+      - "{{ host_boundary_effective.lima.untrusted_instance }}"
+      - --format
+      - "{{ '{{.Status}}' }}"
+  register: _host_boundary_untrusted_status
+  changed_when: false
+  failed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - >
+      (host_boundary_effective.vm_ips.untrusted | default('')) == ''
+      or (host_boundary_effective.vm_ips.untrusted_default_gateway | default('')) == ''
+      or (host_boundary_effective.verify.enabled | default(true))
+      or (
+        host_boundary_effective.pf.auto_allow_untrusted_ssh | default(false)
+        and host_boundary_effective.pf.task_transport_host_ports | default([]) | length == 0
+      )
+
+- name: Require untrusted Lima VM to be running
+  assert:
+    that:
+      - (_host_boundary_untrusted_status.stdout | default('') | trim) == 'Running'
+    fail_msg: "Lima instance {{ host_boundary_effective.lima.untrusted_instance }} must be Running before host boundary discovery/verification."
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - _host_boundary_untrusted_status is not skipped
+
+- name: Discover gateway VM source IP
+  command:
+    argv:
+      - limactl
+      - shell
+      - "{{ host_boundary_effective.lima.gateway_instance }}"
+      - --
+      - sh
+      - -lc
+      - "ip route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == \"src\") { print $(i + 1); exit } }'"
+  register: _host_boundary_gateway_ip
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - (host_boundary_effective.vm_ips.gateway | default('')) == ''
+
+- name: Discover untrusted VM source IP
+  command:
+    argv:
+      - limactl
+      - shell
+      - "{{ host_boundary_effective.lima.untrusted_instance }}"
+      - --
+      - sh
+      - -lc
+      - "ip route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == \"src\") { print $(i + 1); exit } }'"
+  register: _host_boundary_untrusted_ip
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - (host_boundary_effective.vm_ips.untrusted | default('')) == ''
+
+- name: Discover untrusted VM default gateway
+  command:
+    argv:
+      - limactl
+      - shell
+      - "{{ host_boundary_effective.lima.untrusted_instance }}"
+      - --
+      - sh
+      - -lc
+      - "ip route show default | awk '{ print $3; exit }'"
+  register: _host_boundary_untrusted_default_gateway
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - (host_boundary_effective.vm_ips.untrusted_default_gateway | default('')) == ''
+
+- name: Discover untrusted Lima SSH host port
+  command:
+    argv:
+      - limactl
+      - list
+      - "{{ host_boundary_effective.lima.untrusted_instance }}"
+      - --format
+      - "{{ '{{.SSHLocalPort}}' }}"
+  register: _host_boundary_untrusted_ssh_port
+  changed_when: false
+  when:
+    - host_boundary_effective.lima.enabled | default(true)
+    - host_boundary_effective.pf.auto_allow_untrusted_ssh | default(false)
+    - host_boundary_effective.pf.task_transport_host_ports | default([]) | length == 0
+
+- name: Resolve host boundary facts
+  set_fact:
+    host_boundary_gateway_ip: "{{ host_boundary_effective.vm_ips.gateway | default('') | ternary(host_boundary_effective.vm_ips.gateway, _host_boundary_gateway_ip.stdout | default('') | trim) }}"
+    host_boundary_untrusted_ip: "{{ host_boundary_effective.vm_ips.untrusted | default('') | ternary(host_boundary_effective.vm_ips.untrusted, _host_boundary_untrusted_ip.stdout | default('') | trim) }}"
+    host_boundary_untrusted_default_gateway: "{{ host_boundary_effective.vm_ips.untrusted_default_gateway | default('') | ternary(host_boundary_effective.vm_ips.untrusted_default_gateway, _host_boundary_untrusted_default_gateway.stdout | default('') | trim) }}"
+    host_boundary_pipelock_port: "{{ host_boundary_effective.pipelock.listen.split(':')[-1] }}"
+    host_boundary_locksmith_port: "{{ host_boundary_effective.locksmith.listen_port | string }}"
+    host_boundary_task_transport_ports: >-
+      {{
+        (host_boundary_effective.pf.task_transport_host_ports | default([]))
+        if (host_boundary_effective.pf.task_transport_host_ports | default([]) | length > 0)
+        else
+        ([_host_boundary_untrusted_ssh_port.stdout | default('') | trim]
+          | reject('equalto', '')
+          | list)
+      }}
+
+- name: Validate resolved VM identities
+  assert:
+    that:
+      - host_boundary_gateway_ip | length > 0
+      - host_boundary_untrusted_ip | length > 0
+      - host_boundary_gateway_ip != host_boundary_untrusted_ip
+    fail_msg: "Host boundary needs distinct gateway and untrusted VM source IPs."
+
+- name: Render host Pipelock config
+  become: true
+  template:
+    src: pipelock-host.yaml.j2
+    dest: "{{ host_boundary_effective.pipelock.config_path }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: reload host pipelock launchdaemon
+  when: host_boundary_effective.pipelock.enabled | default(true)
+
+- name: Render host Locksmith config
+  become: true
+  template:
+    src: locksmith-host.yaml.j2
+    dest: "{{ host_boundary_effective.locksmith.config_path }}"
+    owner: root
+    group: wheel
+    mode: "0640"
+  notify: reload host locksmith launchdaemon
+  when: host_boundary_effective.locksmith.enabled | default(true)
+
+- name: Render root-only Locksmith environment wrapper
+  become: true
+  template:
+    src: locksmith-env.sh.j2
+    dest: "{{ host_boundary_effective.locksmith.wrapper_path }}"
+    owner: root
+    group: wheel
+    mode: "0700"
+  notify: reload host locksmith launchdaemon
+  no_log: true
+  when: host_boundary_effective.locksmith.enabled | default(true)
+
+- name: Render Pipelock LaunchDaemon
+  become: true
+  template:
+    src: pipelock.plist.j2
+    dest: "{{ host_boundary_effective.pipelock.plist_path }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: reload host pipelock launchdaemon
+  when:
+    - host_boundary_effective.pipelock.enabled | default(true)
+    - host_boundary_effective.pipelock.manage_launchd | default(true)
+
+- name: Render Locksmith LaunchDaemon
+  become: true
+  template:
+    src: locksmith.plist.j2
+    dest: "{{ host_boundary_effective.locksmith.plist_path }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: reload host locksmith launchdaemon
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.manage_launchd | default(true)
+
+- name: Render host PF anchor
+  become: true
+  template:
+    src: host-boundary.pf.j2
+    dest: "{{ host_boundary_effective.pf.anchor_file }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: reload host pf
+  when: host_boundary_effective.pf.enabled | default(true)
+
+- name: Include host boundary anchor from pf.conf
+  become: true
+  blockinfile:
+    path: "{{ host_boundary_effective.pf.pf_conf }}"
+    marker: "# {mark} OPENCLAW HOST BOUNDARY"
+    backup: true
+    block: |
+      anchor "{{ host_boundary_effective.pf.anchor_name }}"
+      load anchor "{{ host_boundary_effective.pf.anchor_name }}" from "{{ host_boundary_effective.pf.anchor_file }}"
+  notify: reload host pf
+  when:
+    - host_boundary_effective.pf.enabled | default(true)
+    - host_boundary_effective.pf.install_include | default(true)
+
+- name: Flush host boundary handlers before verification
+  meta: flush_handlers
+
+- name: Verify host boundary posture
+  include_tasks: verify.yml
+  when: host_boundary_effective.verify.enabled | default(true)

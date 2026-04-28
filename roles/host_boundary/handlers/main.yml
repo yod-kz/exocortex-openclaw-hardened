@@ -1,0 +1,44 @@
+---
+- name: reload host pipelock launchdaemon
+  become: true
+  shell: |
+    set -euo pipefail
+    launchctl bootout system "{{ host_boundary_effective.pipelock.plist_path }}" >/dev/null 2>&1 || true
+    launchctl bootstrap system "{{ host_boundary_effective.pipelock.plist_path }}"
+    launchctl enable "system/{{ host_boundary_effective.pipelock.label }}"
+    launchctl kickstart -k "system/{{ host_boundary_effective.pipelock.label }}"
+  args:
+    executable: /bin/bash
+  when:
+    - host_boundary_effective.platform == "darwin_pf"
+    - host_boundary_effective.pipelock.enabled | default(true)
+    - host_boundary_effective.pipelock.manage_launchd | default(true)
+
+- name: reload host locksmith launchdaemon
+  become: true
+  shell: |
+    set -euo pipefail
+    launchctl bootout system "{{ host_boundary_effective.locksmith.plist_path }}" >/dev/null 2>&1 || true
+    launchctl bootstrap system "{{ host_boundary_effective.locksmith.plist_path }}"
+    launchctl enable "system/{{ host_boundary_effective.locksmith.label }}"
+    launchctl kickstart -k "system/{{ host_boundary_effective.locksmith.label }}"
+  args:
+    executable: /bin/bash
+  when:
+    - host_boundary_effective.platform == "darwin_pf"
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.manage_launchd | default(true)
+
+- name: reload host pf
+  become: true
+  shell: |
+    set -euo pipefail
+    pfctl -nf "{{ host_boundary_effective.pf.pf_conf }}"
+    pfctl -f "{{ host_boundary_effective.pf.pf_conf }}"
+    pfctl -E >/dev/null 2>&1 || true
+  args:
+    executable: /bin/bash
+  when:
+    - host_boundary_effective.platform == "darwin_pf"
+    - host_boundary_effective.pf.enabled | default(true)
+    - host_boundary_effective.pf.reload | default(true)

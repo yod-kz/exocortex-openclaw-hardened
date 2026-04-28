@@ -11,6 +11,7 @@ live in `roles/<role>/defaults/main.yml` and are overridden by site config.
 
 **See also:**
 [Architecture](architecture.md) |
+[Host-Side Pipelock and Locksmith](host-side-pipelock-locksmith.md) |
 [Installation](installation.md) |
 [Operations](operations.md) |
 [Security](security.md) |
@@ -127,6 +128,9 @@ Credential-injecting reverse proxy for tool APIs.
 | `locksmith.listen_port` | int | `9200` | Listen port |
 | `locksmith.log_level` | string | `info` | Log level |
 | `locksmith.inbound_token` | string | `""` | Bearer token agents must present (vault reference) |
+| `locksmith.required` | bool | `true` | Render OpenClaw's Locksmith plugin in required mode |
+| `locksmith.generic_tool` | bool | `false` | Expose the generic `locksmith_call` tool when true; hardened deployments should keep this false |
+| `locksmith.openclaw_base_url` | string | derived from listen host/port | URL rendered into OpenClaw plugin config |
 | `locksmith.tools` | list of tool objects | `[]` | Tool definitions (see below) |
 
 #### Locksmith tool fields
@@ -140,8 +144,35 @@ Credential-injecting reverse proxy for tool APIs.
 | `api_key` | string | yes | Credential to inject (vault reference) |
 | `api_key_header` | string | yes | Header name for the credential |
 | `api_key_prefix` | string | yes | Prefix before key value (empty string for none) |
+| `auth_required` | bool | no | Set false only for intentionally unauthenticated tools; defaults to true |
 | `api_key_env` | string | no | Environment variable name exposed to containers |
 | `timeout_seconds` | int | no | Request timeout |
+| `projected` | bool | no | Project this tool into OpenClaw as `locksmith_<name>`; defaults to true |
+
+### host_boundary
+
+Host-owned gateway/untrusted VM boundary. These variables live under
+`group_vars/host_boundary/main.yml` and are consumed by
+`playbook-host-boundary.yml`, not the standard Linux agent-host playbook.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `host_boundary.enabled` | bool | `false` | Enable host-side boundary changes |
+| `host_boundary.platform` | string | `darwin_pf` | Host firewall/service platform; currently macOS PF + launchd |
+| `host_boundary.allow_wildcard_service_bind_without_pf` | bool | `false` | Permit unsafe host service wildcard binds without PF; keep false outside throwaway experiments |
+| `host_boundary.lima.manage` | bool | `false` | Render and start Lima VMs from this role |
+| `host_boundary.lima.recreate` | bool | `false` | Delete and recreate managed VMs |
+| `host_boundary.lima.gateway_instance` | string | `openclaw-gateway` | Trusted gateway VM name |
+| `host_boundary.lima.untrusted_instance` | string | `openclaw-untrusted` | Untrusted worker VM name |
+| `host_boundary.vm_ips.gateway` | string | `""` | Override gateway VM source IP; blank means discover with `limactl shell` |
+| `host_boundary.vm_ips.untrusted` | string | `""` | Override untrusted VM source IP; blank means discover with `limactl shell` |
+| `host_boundary.pipelock.listen` | string | `0.0.0.0:8888` | Host Pipelock listen address for VM access |
+| `host_boundary.locksmith.listen_host` | string | `0.0.0.0` | Host Locksmith bind address for gateway access |
+| `host_boundary.locksmith.listen_port` | int | `9200` | Host Locksmith port |
+| `host_boundary.pf.anchor_name` | string | `openclaw-host-boundary` | PF anchor name |
+| `host_boundary.pf.task_transport_host_ports` | list of int | `[]` | Host-forwarded ports that gateway may use for task dispatch, such as untrusted SSH |
+| `host_boundary.pf.auto_allow_untrusted_ssh` | bool | `false` | When task transport ports are empty, discover the untrusted Lima SSHLocalPort and allow gateway access to it |
+| `host_boundary.verify.enabled` | bool | `true` | Run positive and negative boundary checks after install |
 
 ### llamafirewall
 
@@ -179,6 +210,30 @@ Core OpenClaw gateway and agent runtime settings.
 | `openclaw.sandbox.memory` | string | `2g` | Container memory limit |
 | `openclaw.sandbox.cpus` | int | `2` | Container CPU limit |
 | `openclaw.sandbox.pids_limit` | int | `256` | Container PID limit |
+
+### openclaw_agents
+
+Each entry in `openclaw_agents` renders to `agents.list[]` in OpenClaw config.
+Common fields are `id`, `name`, `default`, `workspace_subdir`,
+`memory_search`, `skills`, `state_repo`, and `state_path`.
+
+For hardened gateway/untrusted layouts, the config renderer also passes through
+these optional OpenClaw-native blocks without interpreting them:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tools` | object | Per-agent tool allow/deny policy, filesystem policy, and execution policy |
+| `subagents` | object | Per-agent subagent routing and allowlist settings |
+| `sandbox` | object | Per-agent sandbox backend/settings such as SSH untrusted worker targets |
+
+This keeps policy in config and the Locksmith plugin instead of requiring
+OpenClaw core patches.
+
+These blocks are trusted deployment policy. Review them the same way as
+firewall or credential config: a broad `tools`, `subagents`, or `sandbox`
+override can intentionally expand an agent's authority. The role passes them
+through to avoid fork-only OpenClaw core patches; it does not attempt to
+re-implement OpenClaw's policy schema in Ansible.
 
 #### Sandbox Modes
 

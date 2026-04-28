@@ -1,0 +1,23 @@
+---
+- name: Merge host boundary defaults with site config
+  set_fact:
+    host_boundary_effective: "{{ _host_boundary_defaults | combine(host_boundary | default({}), recursive=True) }}"
+  tags: [always]
+
+- name: Skip host boundary when disabled
+  debug:
+    msg: "host_boundary.enabled is false; no host boundary changes applied."
+  when: not (host_boundary_effective.enabled | default(false) | bool)
+
+- name: Configure macOS PF host boundary
+  include_tasks: darwin_pf.yml
+  when:
+    - host_boundary_effective.enabled | default(false) | bool
+    - host_boundary_effective.platform == "darwin_pf"
+
+- name: Reject unsupported host boundary platform
+  fail:
+    msg: "Unsupported host_boundary.platform={{ host_boundary_effective.platform }}"
+  when:
+    - host_boundary_effective.enabled | default(false) | bool
+    - host_boundary_effective.platform != "darwin_pf"

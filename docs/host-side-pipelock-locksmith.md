@@ -258,6 +258,76 @@ untrusted VMs when their network shape or trust material is stale.
    - No raw upstream credentials appear in OpenClaw config, environment, logs,
      or agent-visible tool output.
 
+## Current Implementation
+
+The first implementation is an opt-in host-boundary playbook:
+
+```bash
+ansible-playbook -i inventory/hosts.yml \
+  ../openclaw-hardened/playbook-host-boundary.yml \
+  --ask-become-pass
+```
+
+It targets the `host_boundary` inventory group and currently implements the
+macOS/Lima path:
+
+- `roles/host_boundary` renders host Pipelock and Locksmith configs.
+- It can install LaunchDaemons for host-owned Pipelock and Locksmith.
+- Locksmith's LaunchDaemon plist stays non-secret; upstream API keys and the
+  inbound token are written only to a root-only wrapper script.
+- It can render gateway and untrusted Lima YAMLs for clean installs.
+- It detects the gateway and untrusted VM source IPs from inside the guests.
+- It renders a PF anchor that permits only the required crossings and blocks
+  direct VM egress.
+- It verifies the core positive and negative paths after PF reload.
+
+Host Pipelock and Locksmith bind on wildcard addresses in the macOS VM layout
+so Lima guests can reach them through `host.lima.internal`. That is acceptable
+only with the PF anchor enabled. The role fails by default if wildcard service
+binds are requested with PF disabled.
+
+Gateway-to-untrusted task dispatch is explicit. Add the untrusted SSH host
+forward to `host_boundary.pf.task_transport_host_ports`, or opt in to
+`host_boundary.pf.auto_allow_untrusted_ssh` for Lima SSHLocalPort discovery.
+The auto-allow path is disabled by default.
+
+The role is separate from the existing Linux/systemd/nftables playbook on
+purpose. The Linux agent-host roles remain the production single-host path;
+the host-boundary playbook is the local VM boundary path.
+
+### macOS Lima Note
+
+Apple VZ NAT behavior is the load-bearing detail. In the current Lima
+development setup, PF counters show distinct VM source IPs for the gateway and
+untrusted guests. The role therefore discovers guest source IPs with:
+
+```bash
+limactl shell <vm> -- ip route get 1.1.1.1
+```
+
+That value must be PF-visible for the boundary to be meaningful. The
+verification phase checks that the resulting PF anchor is loaded and that
+untrusted cannot reach Locksmith while both VMs can use Pipelock. If a future
+Lima networking mode hides guest source IPs from PF, switch the VM templates to
+a PF-visible network such as socket_vmnet before relying on this boundary.
+
+### OpenClaw Compatibility
+
+This design does not require OpenClaw core changes. The gateway consumes the
+boundary through ordinary config:
+
+- the bundled Locksmith plugin is enabled;
+- `genericTool` is disabled in hardened mode;
+- projected `locksmith_<slug>` tools are rendered from the deployment config;
+- `LOCKSMITH_INBOUND_TOKEN` is supplied through the service environment.
+- per-agent `tools`, `subagents`, and `sandbox` blocks are passed through from
+  site config so read-only/write-only worker profiles do not require core code
+  changes.
+
+All host firewalling, service lifecycle, VM provisioning, and credential store
+placement remain in `openclaw-hardened` and `agent-locksmith`, not in OpenClaw
+core.
+
 ## Repository Ownership
 
 | Responsibility | Owning repo |
@@ -277,13 +347,15 @@ The current `openclaw-exocortex/scripts/dev/lima` helpers are acceptable as a
 development bridge, but the target clean install belongs in
 `openclaw-hardened`.
 
-## Implementation Backlog
+## Remaining Backlog
 
-1. Add host-mode roles in `openclaw-hardened`:
-   - `host_pipelock` for launchd/PF on macOS and systemd/nftables on Linux.
-   - `host_locksmith` for host service install and credential-store binding.
-   - `vm_topology` for gateway/untrusted VM lifecycle and identity discovery.
-   - `host_firewall` for rendering mandatory VM egress policy.
+1. Extend the host-boundary implementation:
+   - Add the Linux/nftables host path.
+   - Add stable VM identity support where the runtime allows it.
+   - Add PF counter assertions that prove the rendered source IPs are the
+     ones carrying blocked traffic.
+   - Add install tasks for Pipelock and Locksmith binaries, not just managed
+     service configuration.
 
 2. Extend `agent-locksmith`:
    - Per-token tool allowlists.

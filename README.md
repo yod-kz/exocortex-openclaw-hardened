@@ -103,6 +103,11 @@ If you manage Phase 1 externally (your own provisioning tooling), set
 `bootstrap.enabled: false` in your site config. The playbook will verify
 that the `openclaw` user and Docker exist before proceeding.
 
+For host-side gateway/untrusted VM deployments on macOS, use the separate
+`playbook-host-boundary.yml`. It installs host Pipelock/Locksmith launchd
+services, renders the PF boundary, and can manage the Lima VM topology without
+changing the standard Linux agent-host playbook.
+
 ## Key Features
 
 ### Declarative Version Pinning

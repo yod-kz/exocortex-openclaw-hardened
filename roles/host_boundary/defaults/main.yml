@@ -1,0 +1,131 @@
+---
+_host_boundary_defaults:
+  enabled: false
+  platform: "darwin_pf"
+  allow_wildcard_service_bind_without_pf: false
+
+  # Host-side material owned by this role. Service configs live here; PF uses
+  # /etc/pf.anchors because that is the native macOS convention.
+  config_dir: "/usr/local/etc/openclaw-boundary"
+  log_dir: "/var/log/openclaw-boundary"
+  bin_dir: "/usr/local/bin"
+
+  # Do not create/delete VMs by default. Existing Lima instances can be used
+  # for iteration, while clean installs can opt in to VM management.
+  lima:
+    enabled: true
+    manage: false
+    recreate: false
+    start: true
+    config_dir: "{{ lookup('env', 'HOME') }}/.openclaw/host-boundary/lima"
+    gateway_instance: "openclaw-gateway"
+    untrusted_instance: "openclaw-untrusted"
+    gateway:
+      cpus: 6
+      memory: "12GiB"
+      disk: "80GiB"
+      gateway_port: 18789
+      control_ui_port: 18790
+      host_gateway_port: 29789
+      host_control_ui_port: 29790
+    untrusted:
+      cpus: 4
+      memory: "8GiB"
+      disk: "60GiB"
+      gateway_port: 18789
+      control_ui_port: 18790
+      host_gateway_port: 39789
+      host_control_ui_port: 39790
+
+  # Set these to skip limactl-based discovery, or leave blank to discover from
+  # `ip route get 1.1.1.1` inside each Lima guest.
+  vm_ips:
+    gateway: ""
+    untrusted: ""
+    untrusted_default_gateway: ""
+
+  pipelock:
+    enabled: true
+    label: "com.exocortex.openclaw.pipelock"
+    binary_path: "/usr/local/bin/pipelock"
+    config_path: "/usr/local/etc/openclaw-boundary/pipelock.yaml"
+    plist_path: "/Library/LaunchDaemons/com.exocortex.openclaw.pipelock.plist"
+    listen: "0.0.0.0:8888"
+    user: ""
+    manage_launchd: true
+    health_url: "http://127.0.0.1:8888/health"
+    mode: "balanced"
+    enforce: true
+    api_allowlist:
+      - "*.anthropic.com"
+      - "*.openai.com"
+      - "api.together.xyz"
+      - "github.com"
+      - "*.github.com"
+      - "*.githubusercontent.com"
+      - "pypi.org"
+      - "files.pythonhosted.org"
+      - "registry.npmjs.org"
+      - "*.docker.io"
+      - "*.docker.com"
+      - "production.cloudflare.docker.com"
+      - "ghcr.io"
+      - "apt.grafana.com"
+      - "*.ubuntu.com"
+      - "*.debian.org"
+    api_allowlist_extra: []
+    blocklist:
+      - "*.pastebin.com"
+      - "*.transfer.sh"
+      - "*.ngrok.io"
+      - "*.requestbin.com"
+      - "*.webhook.site"
+    forward_proxy:
+      sni_verification: true
+    dlp:
+      scan_env: false
+      secret_patterns: true
+      entropy_analysis: true
+    tool_chain_detection:
+      enabled: true
+      action: "warn"
+      window_size: 20
+      window_seconds: 300
+      max_gap: 3
+    monitoring:
+      entropy_threshold: 4.5
+      max_url_length: 2048
+      max_requests_per_minute: 60
+
+  locksmith:
+    enabled: true
+    label: "com.exocortex.openclaw.locksmith"
+    binary_path: "/usr/local/bin/locksmith"
+    config_path: "/usr/local/etc/openclaw-boundary/locksmith.yaml"
+    wrapper_path: "/usr/local/etc/openclaw-boundary/locksmith-env.sh"
+    plist_path: "/Library/LaunchDaemons/com.exocortex.openclaw.locksmith.plist"
+    listen_host: "0.0.0.0"
+    listen_port: 9200
+    user: ""
+    manage_launchd: true
+    health_url: "http://127.0.0.1:9200/health"
+
+  pf:
+    enabled: true
+    anchor_name: "openclaw-host-boundary"
+    anchor_file: "/etc/pf.anchors/openclaw-host-boundary"
+    pf_conf: "/etc/pf.conf"
+    install_include: true
+    reload: true
+    # Host-forwarded gateway/API ports must not be reachable from untrusted.
+    gateway_api_host_ports: [18789, 18790, 29789, 29790, 39789, 39790]
+    # Host-forwarded untrusted SSH port(s) used by gateway task dispatch. Leave
+    # empty unless a Lima SSHLocalPort or similar host transport is known.
+    task_transport_host_ports: []
+    auto_allow_untrusted_ssh: false
+
+  verify:
+    enabled: true
+    guest_host_alias: "host.lima.internal"
+    internet_probe_url: "https://api.github.com/zen"
+    timeout_seconds: 8

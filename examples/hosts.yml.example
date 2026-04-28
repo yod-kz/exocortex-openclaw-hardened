@@ -1,5 +1,9 @@
 all:
   children:
+    host_boundary:
+      hosts:
+        localhost:
+          ansible_connection: local
     agent_hosts:
       hosts:
         my-agent-host:

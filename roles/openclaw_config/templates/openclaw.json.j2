@@ -131,6 +131,15 @@
             "baseUrl": "http://{{ ollama.host | default('127.0.0.1') }}:{{ ollama.port | default(11434) }}"
           }{% endif %}
         }
+{% if agent.tools is defined %}
+        ,"tools": {{ agent.tools | to_nice_json(indent=2) }}
+{% endif %}
+{% if agent.subagents is defined %}
+        ,"subagents": {{ agent.subagents | to_nice_json(indent=2) }}
+{% endif %}
+{% if agent.sandbox is defined %}
+        ,"sandbox": {{ agent.sandbox | to_nice_json(indent=2) }}
+{% endif %}
       }{{ "," if not loop.last }}
 {% endfor %}
     ]
@@ -281,7 +290,7 @@
   ],
 {% endif %}
   "plugins": {
-    "entries": {
+{% set _plugin_entries_out = {} %}
 {% set _plugin_channels = _chans.keys() | list %}
 {% if _agent_slack | length > 0 and 'slack' not in _plugin_channels %}
 {%   set _ = _plugin_channels.append('slack') %}
@@ -293,8 +302,38 @@
 {%   set _ = _plugin_channels.append('discord') %}
 {% endif %}
 {% for channel in _plugin_channels %}
-      "{{ channel }}": { "enabled": true }{{ "," if not loop.last }}
+{%   set _ = _plugin_entries_out.update({channel: {'enabled': true}}) %}
 {% endfor %}
-    }
+{% if locksmith.enabled | default(false) %}
+{%   set _locksmith_projected_tools = {} %}
+{%   for tool in locksmith.tools | default([]) %}
+{%     if tool.projected | default(true) and (tool.api_key | default('') != '' or tool.auth_required | default(true) == false) %}
+{%       set _tool_config = {'enabled': true, 'description': tool.description | default(tool.name)} %}
+{%       if tool.label is defined %}
+{%         set _ = _tool_config.update({'label': tool.label}) %}
+{%       endif %}
+{%       set _ = _locksmith_projected_tools.update({tool.name: _tool_config}) %}
+{%     endif %}
+{%   endfor %}
+{%   set _locksmith_base_url = locksmith.openclaw_base_url | default('') %}
+{%   if _locksmith_base_url == '' %}
+{%     set _locksmith_base_url = 'http://' ~ (locksmith.listen_host | default('127.0.0.1')) ~ ':' ~ (locksmith.listen_port | default(9200)) %}
+{%   endif %}
+{%   set _locksmith_config = {
+       'required': locksmith.required | default(true),
+       'genericTool': locksmith.generic_tool | default(false),
+       'baseUrl': _locksmith_base_url,
+       'catalogTtlSeconds': locksmith.catalog_ttl_seconds | default(30),
+       'timeoutSeconds': locksmith.timeout_seconds | default(30),
+       'maxResponseBytes': locksmith.max_response_bytes | default(262144),
+       'promptCatalog': locksmith.prompt_catalog | default(true),
+       'tools': _locksmith_projected_tools
+     } %}
+{%   if locksmith.inbound_token | default('') != '' %}
+{%     set _ = _locksmith_config.update({'inboundToken': {'ref': 'env:LOCKSMITH_INBOUND_TOKEN'}}) %}
+{%   endif %}
+{%   set _ = _plugin_entries_out.update({'locksmith': {'enabled': true, 'config': _locksmith_config}}) %}
+{% endif %}
+    "entries": {{ _plugin_entries_out | to_nice_json(indent=2) | indent(6, false) }}
   }
 }

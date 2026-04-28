@@ -1,0 +1,14 @@
+---
+# Host-side OpenClaw security boundary for local VM deployments.
+#
+# This playbook is intentionally separate from playbook.yml. The main playbook
+# targets Linux agent hosts with systemd/nftables. This one targets the host OS
+# that owns the gateway/untrusted VM boundary, starting with macOS PF + Lima.
+- name: OpenClaw Host Boundary
+  hosts: "{{ host_boundary_hosts | default('host_boundary') }}"
+  connection: local
+  gather_facts: true
+
+  roles:
+    - role: host_boundary
+      tags: [host_boundary]

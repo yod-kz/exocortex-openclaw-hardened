@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/locksmith --config /etc/locksmith/config.yaml
+EnvironmentFile=/etc/locksmith/locksmith.env
 Restart=always
 RestartSec=5
 
@@ -16,15 +17,6 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/log/locksmith
 PrivateTmp=true
-
-{% for tool in locksmith.tools %}
-{% if tool.api_key_env is defined and tool.api_key | default('') != '' %}
-Environment={{ tool.api_key_env }}={{ tool.api_key }}
-{% endif %}
-{% endfor %}
-{% if locksmith.inbound_token | default('') != '' %}
-Environment=LOCKSMITH_INBOUND_TOKEN={{ locksmith.inbound_token }}
-{% endif %}
 
 [Install]
 WantedBy=multi-user.target

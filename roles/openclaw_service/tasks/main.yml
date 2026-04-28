@@ -32,6 +32,25 @@
       Run 'openclaw onboard' as the openclaw user first.
   when: not binary_check.stat.exists
 
+- name: Create OpenClaw service config directory
+  file:
+    path: /etc/openclaw
+    state: directory
+    owner: root
+    group: openclaw
+    mode: "0750"
+
+- name: Write OpenClaw service environment
+  template:
+    src: openclaw.env.j2
+    dest: /etc/openclaw/openclaw.env
+    owner: root
+    group: openclaw
+    mode: "0640"
+  notify:
+    - restart openclaw
+  no_log: true
+
 - name: Write system-level openclaw service
   template:
     src: openclaw.service.j2
