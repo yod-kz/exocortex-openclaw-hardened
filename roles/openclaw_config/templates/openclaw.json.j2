@@ -304,7 +304,7 @@
 {% for channel in _plugin_channels %}
 {%   set _ = _plugin_entries_out.update({channel: {'enabled': true}}) %}
 {% endfor %}
-{% if locksmith.enabled | default(false) %}
+{% if locksmith.enabled | default(true) %}
 {%   set _locksmith_projected_tools = {} %}
 {%   for tool in locksmith.tools | default([]) %}
 {%     if tool.projected | default(true) and (tool.api_key | default('') != '' or tool.auth_required | default(true) == false) %}
@@ -312,7 +312,41 @@
 {%       if tool.label is defined %}
 {%         set _ = _tool_config.update({'label': tool.label}) %}
 {%       endif %}
+{%       if tool.mode is defined %}
+{%         set _ = _tool_config.update({'mode': tool.mode}) %}
+{%       endif %}
+{%       if tool.method is defined %}
+{%         set _ = _tool_config.update({'method': tool.method}) %}
+{%       endif %}
+{%       if tool.path is defined %}
+{%         set _ = _tool_config.update({'path': tool.path}) %}
+{%       endif %}
+{%       if tool.parameters is defined %}
+{%         set _ = _tool_config.update({'parameters': tool.parameters}) %}
+{%       endif %}
 {%       set _ = _locksmith_projected_tools.update({tool.name: _tool_config}) %}
+{%     endif %}
+{%   endfor %}
+{%   for tool in locksmith.kamiwaza.projected_tools | default([]) %}
+{%     if tool.enabled | default(true) and tool.slug | default('') != '' %}
+{%       set _tool_config = {
+           'enabled': true,
+           'description': tool.description | default(tool.slug),
+           'mode': tool.mode | default('json')
+         } %}
+{%       if tool.label is defined %}
+{%         set _ = _tool_config.update({'label': tool.label}) %}
+{%       endif %}
+{%       if tool.method is defined %}
+{%         set _ = _tool_config.update({'method': tool.method}) %}
+{%       endif %}
+{%       if tool.path is defined %}
+{%         set _ = _tool_config.update({'path': tool.path}) %}
+{%       endif %}
+{%       if tool.parameters is defined %}
+{%         set _ = _tool_config.update({'parameters': tool.parameters}) %}
+{%       endif %}
+{%       set _ = _locksmith_projected_tools.update({tool.slug: _tool_config}) %}
 {%     endif %}
 {%   endfor %}
 {%   set _locksmith_base_url = locksmith.openclaw_base_url | default('') %}

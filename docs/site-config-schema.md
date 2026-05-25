@@ -122,15 +122,27 @@ Credential-injecting reverse proxy for tool APIs.
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `locksmith.enabled` | bool | `false` | Enable Locksmith |
-| `locksmith.version` | string | `latest` | Container image tag |
+| `locksmith.enabled` | bool | `true` | Enable Locksmith. Hardened defaults treat it as part of the base boundary |
+| `locksmith.install_method` | string | `auto` | Install mode: `auto`, `release`, `source`, or `existing` |
+| `locksmith.version` | string | `latest` | Release tag when release download is used |
+| `locksmith.daemon_binary_path` | string | `/usr/local/bin/locksmithd` | Daemon binary used by systemd |
+| `locksmith.cli_binary_path` | string | `/usr/local/bin/locksmith` | Operator/agent CLI binary |
+| `locksmith.source_dir` | string | `{{ playbook_dir }}/../exocortex-agent-locksmith` | Local source checkout used by `auto` fallback or `source` install |
 | `locksmith.listen_host` | string | `127.0.0.1` | Bind address |
 | `locksmith.listen_port` | int | `9200` | Listen port |
 | `locksmith.log_level` | string | `info` | Log level |
 | `locksmith.inbound_token` | string | `""` | Bearer token agents must present (vault reference) |
+| `locksmith.oauth_sealing_key` | string | `""` | Optional base64 32-byte OAuth sealing key rendered as `LOCKSMITH_OAUTH_SEALING_KEY` |
 | `locksmith.required` | bool | `true` | Render OpenClaw's Locksmith plugin in required mode |
 | `locksmith.generic_tool` | bool | `false` | Expose the generic `locksmith_call` tool when true; hardened deployments should keep this false |
 | `locksmith.openclaw_base_url` | string | derived from listen host/port | URL rendered into OpenClaw plugin config |
+| `locksmith.kamiwaza.enabled` | bool | `false` | Enable Locksmith's Kamiwaza MCP provider |
+| `locksmith.kamiwaza.api_url` | string | `""` | Kamiwaza platform API base, for example `https://localhost/api`; if empty, Locksmith tries Kamiwaza env vars and built-in local candidates |
+| `locksmith.kamiwaza.api_token` | string | `""` | Kamiwaza PAT or service token; rendered only into Locksmith's root-owned environment |
+| `locksmith.kamiwaza.api_token_env` | string | `KAMIWAZA_API_KEY` | Environment variable referenced by Locksmith config |
+| `locksmith.kamiwaza.api_token_from_env` | bool | `false` | Render the `api_token` reference even when the token is supplied by an external env file |
+| `locksmith.kamiwaza.verify_tls` | bool | `true` | Verify Kamiwaza TLS; set false only for local self-signed dev installs |
+| `locksmith.kamiwaza.projected_tools` | list | `[]` | Optional OpenClaw projected tool definitions for discovered Kamiwaza MCP slugs |
 | `locksmith.tools` | list of tool objects | `[]` | Tool definitions (see below) |
 
 #### Locksmith tool fields
@@ -140,14 +152,36 @@ Credential-injecting reverse proxy for tool APIs.
 | `name` | string | yes | Tool slug (URL path component) |
 | `description` | string | yes | Human-readable description |
 | `upstream` | string | yes | Upstream base URL |
-| `cloud` | bool | yes | Route via Pipelock CONNECT tunnel |
+| `egress` | string | yes | `proxied` for Pipelock CONNECT routing, `direct` for local/LAN services |
 | `api_key` | string | yes | Credential to inject (vault reference) |
 | `api_key_header` | string | yes | Header name for the credential |
 | `api_key_prefix` | string | yes | Prefix before key value (empty string for none) |
 | `auth_required` | bool | no | Set false only for intentionally unauthenticated tools; defaults to true |
 | `api_key_env` | string | no | Environment variable name exposed to containers |
-| `timeout_seconds` | int | no | Request timeout |
+| `timeouts.request_seconds` | int | no | Total request timeout |
+| `timeouts.idle_seconds` | int | no | Per-read idle timeout for streaming responses |
+| `body_limit_bytes` | int | no | Maximum request body size Locksmith accepts for the tool |
+| `response.max_size_bytes` | int | no | Optional response size cap |
+| `response.content_type_allowlist` | list | no | Optional accepted upstream content types |
+| `response.redaction_patterns` | list | no | Optional non-streaming response regex redactions |
 | `projected` | bool | no | Project this tool into OpenClaw as `locksmith_<name>`; defaults to true |
+| `mode` | string | no | OpenClaw projection mode: `proxy` for HTTP-shaped params or `json` to forward raw tool params as a JSON body |
+| `parameters` | object | no | Optional OpenClaw tool parameter schema, useful with `mode: json` |
+
+`cloud` and `timeout_seconds` are still accepted in site config for older deployments, but the role renders Locksmith's v2 shape into `/etc/locksmith/config.yaml`.
+
+#### Kamiwaza projected tool fields
+
+`locksmith.kamiwaza.projected_tools` is an OpenClaw projection allowlist. Locksmith still discovers the live MCP tool from Kamiwaza and injects the bearer token; this list only decides which slugs become first-class OpenClaw tools.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `slug` | string | yes | Locksmith slug, usually `kamiwaza_<extension>_<tool>` after non-alphanumeric characters are normalized to underscores |
+| `description` | string | no | Tool description shown to the agent |
+| `label` | string | no | Optional display label |
+| `mode` | string | no | Defaults to `json`, forwarding raw OpenClaw tool params to Locksmith |
+| `method` | string | no | Defaults to `POST` for `json` mode |
+| `parameters` | object | no | Optional OpenClaw tool parameter schema copied from MCP `inputSchema` or hand-written |
 
 ### host_boundary
 
@@ -168,6 +202,9 @@ Host-owned gateway/untrusted VM boundary. These variables live under
 | `host_boundary.vm_ips.untrusted` | string | `""` | Override untrusted VM source IP; blank means discover with `limactl shell` |
 | `host_boundary.vm_ips.extra_direct_egress_sources` | list of string | `[]` | Additional VM/NAT source IPs to block from direct egress without granting service access |
 | `host_boundary.pipelock.listen` | string | `0.0.0.0:8888` | Host Pipelock listen address for VM access |
+| `host_boundary.locksmith.daemon_binary_path` | string | `/usr/local/bin/locksmithd` | Host Locksmith daemon binary executed by launchd |
+| `host_boundary.locksmith.cli_binary_path` | string | `/usr/local/bin/locksmith` | Host Locksmith CLI binary used for operator workflows |
+| `host_boundary.locksmith.env_files` | list of string | `[/usr/local/etc/openclaw-boundary/kamiwaza.env]` | Root-only env files sourced by the Locksmith wrapper before daemon start |
 | `host_boundary.locksmith.listen_host` | string | `127.0.0.1` | Host Locksmith bind address. Default keeps Locksmith loopback-only behind the bridge |
 | `host_boundary.locksmith.listen_port` | int | `9201` | Host Locksmith private loopback port |
 | `host_boundary.locksmith.bridge.enabled` | bool | `true` | Expose a PF-gated VM-facing Locksmith port through `socat` |

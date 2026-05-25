@@ -1,7 +1,7 @@
 [Unit]
 Description=OpenClaw Gateway
-After=network-online.target docker.service pipelock.service
-Wants=network-online.target
+After=network-online.target docker.service pipelock.service{% if locksmith.enabled | default(true) %} locksmith.service{% endif %}
+Wants=network-online.target pipelock.service{% if locksmith.enabled | default(true) %} locksmith.service{% endif %}
 {% if llamafirewall.enabled | default(false) %}
 After=llamafirewall.service
 Wants=llamafirewall.service

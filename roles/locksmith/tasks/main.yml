@@ -22,29 +22,288 @@
     group: locksmith
     mode: "0750"
 
-- name: Check if locksmith binary exists
-  stat:
-    path: /usr/local/bin/locksmith
-  register: locksmith_bin
+- name: Create locksmith state directory
+  file:
+    path: /var/lib/locksmith
+    state: directory
+    owner: locksmith
+    group: locksmith
+    mode: "0750"
 
-- name: Set locksmith download URL
+- name: Create locksmith runtime directory
+  file:
+    path: /run/locksmith
+    state: directory
+    owner: locksmith
+    group: locksmith
+    mode: "0750"
+
+- name: Resolve Locksmith release platform
   set_fact:
-    _locksmith_url: >-
+    _locksmith_platform: >-
+      {%- if ansible_architecture in ['x86_64', 'amd64'] -%}
+      linux-amd64
+      {%- elif ansible_architecture in ['aarch64', 'arm64'] -%}
+      linux-arm64
+      {%- else -%}
+      unsupported
+      {%- endif -%}
+    _locksmith_pipelock_proxy: "http://127.0.0.1:{{ pipelock.listen.split(':')[-1] }}"
+
+- name: Require supported architecture for release installs
+  assert:
+    that:
+      - _locksmith_platform != 'unsupported'
+    fail_msg: "Unsupported Locksmith release architecture: {{ ansible_architecture }}"
+  when: locksmith.install_method | default('auto') in ['auto', 'release']
+
+- name: Resolve Locksmith release URLs
+  set_fact:
+    _locksmith_release_base_url: >-
+      {%- set repo = locksmith.release_repo | default('SentientSwarm/agent-locksmith') -%}
       {%- set v = locksmith.version | default('latest') -%}
       {%- if v == 'latest' -%}
-      https://github.com/SentientSwarm/agent-locksmith/releases/latest/download/locksmith-linux-amd64
+      https://github.com/{{ repo }}/releases/latest/download
       {%- else -%}
-      https://github.com/SentientSwarm/agent-locksmith/releases/download/{{ v }}/locksmith-linux-amd64
+      https://github.com/{{ repo }}/releases/download/{{ v }}
       {%- endif -%}
+  when: locksmith.install_method | default('auto') in ['auto', 'release']
 
-- name: Download locksmith binary
-  get_url:
-    url: "{{ _locksmith_url }}"
-    dest: /usr/local/bin/locksmith
-    mode: "0755"
+- name: Resolve Locksmith release artifact URLs
+  set_fact:
+    _locksmith_daemon_url: "{{ locksmith.daemon_download_url | default(_locksmith_release_base_url ~ '/locksmithd-' ~ _locksmith_platform) }}"
+    _locksmith_cli_url: "{{ locksmith.cli_download_url | default(_locksmith_release_base_url ~ '/locksmith-' ~ _locksmith_platform) }}"
+  when: locksmith.install_method | default('auto') in ['auto', 'release']
+
+- name: Initialize Locksmith install facts
+  set_fact:
+    _locksmith_release_failed: false
+    _locksmith_needs_source_build: "{{ locksmith.install_method | default('auto') == 'source' }}"
+
+- name: Install Locksmith release binaries
+  block:
+    - name: Download locksmithd release binary
+      get_url:
+        url: "{{ _locksmith_daemon_url }}"
+        dest: "{{ locksmith.daemon_binary_path | default(locksmith.binary_path | default('/usr/local/bin/locksmithd')) }}"
+        owner: root
+        group: root
+        mode: "0755"
+        force: true
+      environment:
+        https_proxy: "{{ _locksmith_pipelock_proxy }}"
+        http_proxy: "{{ _locksmith_pipelock_proxy }}"
+      notify: restart locksmith
+
+    - name: Download locksmith CLI release binary
+      get_url:
+        url: "{{ _locksmith_cli_url }}"
+        dest: "{{ locksmith.cli_binary_path | default('/usr/local/bin/locksmith') }}"
+        owner: root
+        group: root
+        mode: "0755"
+        force: true
+      environment:
+        https_proxy: "{{ _locksmith_pipelock_proxy }}"
+        http_proxy: "{{ _locksmith_pipelock_proxy }}"
+  rescue:
+    - name: Mark Locksmith release install failed
+      set_fact:
+        _locksmith_release_failed: true
+        _locksmith_needs_source_build: "{{ locksmith.install_method | default('auto') == 'auto' }}"
+  when: locksmith.install_method | default('auto') in ['auto', 'release']
+
+- name: Fail if explicit Locksmith release install failed
+  fail:
+    msg: "Locksmith release install failed from {{ _locksmith_daemon_url }} and {{ _locksmith_cli_url }}."
+  when:
+    - locksmith.install_method | default('auto') == 'release'
+    - _locksmith_release_failed | bool
+
+- name: Validate downloaded locksmithd binary
+  command:
+    argv:
+      - "{{ locksmith.daemon_binary_path | default(locksmith.binary_path | default('/usr/local/bin/locksmithd')) }}"
+      - "--help"
+  register: _locksmith_daemon_version
+  changed_when: false
+  failed_when: false
+  when:
+    - locksmith.install_method | default('auto') in ['auto', 'release']
+    - not (_locksmith_release_failed | bool)
+
+- name: Validate downloaded locksmith CLI binary
+  command:
+    argv:
+      - "{{ locksmith.cli_binary_path | default('/usr/local/bin/locksmith') }}"
+      - "--version"
+  register: _locksmith_cli_version
+  changed_when: false
+  failed_when: false
+  when:
+    - locksmith.install_method | default('auto') in ['auto', 'release']
+    - not (_locksmith_release_failed | bool)
+
+- name: Fall back to source build for invalid auto release binaries
+  set_fact:
+    _locksmith_needs_source_build: true
+  when:
+    - locksmith.install_method | default('auto') == 'auto'
+    - not (_locksmith_release_failed | bool)
+    - >
+      (_locksmith_daemon_version.rc | default(1)) != 0
+      or (_locksmith_daemon_version.stdout | default('')) is not search('Agent Locksmith daemon')
+      or (_locksmith_cli_version.rc | default(1)) != 0
+      or (_locksmith_cli_version.stdout | default('')) is not search('locksmith')
+
+- name: Fail explicit release install if binaries are invalid
+  fail:
+    msg: >-
+      Locksmith release binaries failed validation.
+      daemon={{ _locksmith_daemon_version.stdout | default(_locksmith_daemon_version.stderr | default('')) }},
+      cli={{ _locksmith_cli_version.stdout | default(_locksmith_cli_version.stderr | default('')) }}
+  when:
+    - locksmith.install_method | default('auto') == 'release'
+    - >
+      (_locksmith_daemon_version.rc | default(1)) != 0
+      or (_locksmith_daemon_version.stdout | default('')) is not search('Agent Locksmith daemon')
+      or (_locksmith_cli_version.rc | default(1)) != 0
+      or (_locksmith_cli_version.stdout | default('')) is not search('locksmith')
+
+- name: Check local Locksmith source checkout
+  delegate_to: localhost
+  become: false
+  stat:
+    path: "{{ locksmith.source_dir | default(playbook_dir ~ '/../exocortex-agent-locksmith') }}/Cargo.toml"
+  register: _locksmith_source_checkout
+  when: _locksmith_needs_source_build | bool
+
+- name: Require Locksmith source checkout for source install
+  fail:
+    msg: "Locksmith source checkout not found at {{ locksmith.source_dir | default(playbook_dir ~ '/../exocortex-agent-locksmith') }}."
+  when:
+    - _locksmith_needs_source_build | bool
+    - not _locksmith_source_checkout.stat.exists
+
+- name: Ensure target Locksmith source build directory
+  file:
+    path: "{{ locksmith.source_build_dir | default('/tmp/openclaw-locksmith-src') }}"
+    state: directory
+    mode: "1777"
+  when: _locksmith_needs_source_build | bool
+
+- name: Sync Locksmith source checkout to target
+  ansible.posix.synchronize:
+    src: "{{ locksmith.source_dir | default(playbook_dir ~ '/../exocortex-agent-locksmith') }}/"
+    dest: "{{ locksmith.source_build_dir | default('/tmp/openclaw-locksmith-src') }}/"
+    delete: true
+    rsync_opts:
+      - "--exclude=.git"
+      - "--exclude=target"
+  when: _locksmith_needs_source_build | bool
+
+- name: Build Locksmith v2 binaries on target with Docker
+  command: >-
+    docker run --rm
+    -v {{ locksmith.source_build_dir | default('/tmp/openclaw-locksmith-src') }}:/work
+    -w /work
+    {{ locksmith.build_container_image | default('rust:1-bookworm') }}
+    cargo build --release --bins
   environment:
-    https_proxy: "http://{{ pipelock.listen }}"
-  when: not locksmith_bin.stat.exists
+    https_proxy: "{{ _locksmith_pipelock_proxy }}"
+    http_proxy: "{{ _locksmith_pipelock_proxy }}"
+  when:
+    - _locksmith_needs_source_build | bool
+    - locksmith.build_with_docker | default(true)
+
+- name: Build Locksmith v2 binaries on target with cargo
+  command:
+    argv:
+      - cargo
+      - build
+      - --release
+      - --bins
+    chdir: "{{ locksmith.source_build_dir | default('/tmp/openclaw-locksmith-src') }}"
+  environment:
+    https_proxy: "{{ _locksmith_pipelock_proxy }}"
+    http_proxy: "{{ _locksmith_pipelock_proxy }}"
+  when:
+    - _locksmith_needs_source_build | bool
+    - not (locksmith.build_with_docker | default(true))
+
+- name: Install built locksmithd binary
+  copy:
+    src: "{{ locksmith.source_build_dir | default('/tmp/openclaw-locksmith-src') }}/target/release/locksmithd"
+    dest: "{{ locksmith.daemon_binary_path | default(locksmith.binary_path | default('/usr/local/bin/locksmithd')) }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: restart locksmith
+  when: _locksmith_needs_source_build | bool
+
+- name: Install built locksmith CLI binary
+  copy:
+    src: "{{ locksmith.source_build_dir | default('/tmp/openclaw-locksmith-src') }}/target/release/locksmith"
+    dest: "{{ locksmith.cli_binary_path | default('/usr/local/bin/locksmith') }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  when: _locksmith_needs_source_build | bool
+
+- name: Validate installed locksmithd binary
+  command:
+    argv:
+      - "{{ locksmith.daemon_binary_path | default(locksmith.binary_path | default('/usr/local/bin/locksmithd')) }}"
+      - "--help"
+  register: _locksmith_installed_daemon_version
+  changed_when: false
+  failed_when:
+    - _locksmith_installed_daemon_version.rc != 0
+      or _locksmith_installed_daemon_version.stdout is not search('Agent Locksmith daemon')
+
+- name: Validate installed locksmith CLI binary
+  command:
+    argv:
+      - "{{ locksmith.cli_binary_path | default('/usr/local/bin/locksmith') }}"
+      - "--version"
+  register: _locksmith_installed_cli_version
+  changed_when: false
+  failed_when:
+    - _locksmith_installed_cli_version.rc != 0
+      or _locksmith_installed_cli_version.stdout is not search('locksmith')
+
+- name: Check existing locksmith config
+  stat:
+    path: /etc/locksmith/config.yaml
+  register: _locksmith_existing_config
+
+- name: Archive existing locksmith config
+  copy:
+    src: /etc/locksmith/config.yaml
+    dest: "/etc/locksmith/config.yaml.bak.{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
+    remote_src: true
+    owner: root
+    group: locksmith
+    mode: "0640"
+  when: _locksmith_existing_config.stat.exists
+
+- name: Check existing locksmith environment
+  stat:
+    path: /etc/locksmith/locksmith.env
+  register: _locksmith_existing_env
+
+- name: Archive existing locksmith environment
+  copy:
+    src: /etc/locksmith/locksmith.env
+    dest: "/etc/locksmith/locksmith.env.bak.{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
+    remote_src: true
+    owner: root
+    group: locksmith
+    mode: "0640"
+  no_log: true
+  when: _locksmith_existing_env.stat.exists
 
 - name: Write locksmith config
   template:
@@ -81,15 +340,25 @@
     state: started
     daemon_reload: true
 
-- name: Wait for locksmith to be ready
+- name: Wait for locksmith liveness
   uri:
-    url: "http://{{ locksmith.listen_host | default('127.0.0.1') }}:{{ locksmith.listen_port | default(9200) }}/health"
+    url: "http://{{ locksmith.listen_host | default('127.0.0.1') }}:{{ locksmith.listen_port | default(9200) }}/livez"
     method: GET
     status_code: 200
-  register: locksmith_health
-  retries: 5
+  register: locksmith_livez
+  retries: 10
   delay: 2
-  until: locksmith_health.status == 200
+  until: locksmith_livez.status == 200
+
+- name: Wait for locksmith readiness
+  uri:
+    url: "http://{{ locksmith.listen_host | default('127.0.0.1') }}:{{ locksmith.listen_port | default(9200) }}/readyz"
+    method: GET
+    status_code: 200
+  register: locksmith_readyz
+  retries: 10
+  delay: 2
+  until: locksmith_readyz.status == 200
 
 - name: Verify locksmith tool discovery
   uri:
@@ -103,7 +372,16 @@
   when: locksmith.inbound_token | default('') != ''
   no_log: true
 
+- name: Verify unauthenticated locksmith tool discovery
+  uri:
+    url: "http://{{ locksmith.listen_host | default('127.0.0.1') }}:{{ locksmith.listen_port | default(9200) }}/tools"
+    method: GET
+    status_code: 200
+    return_content: true
+  register: locksmith_tools
+  when: locksmith.inbound_token | default('') == ''
+
 - name: Report active tools
   debug:
-    msg: "Locksmith active tools: {{ (locksmith_tools.json.tools | map(attribute='name') | list) if locksmith_tools.json is defined else 'discovery skipped (no inbound token)' }}"
+    msg: "Locksmith active tools: {{ (locksmith_tools.json.tools | map(attribute='name') | list) if locksmith_tools.json is defined else 'discovery skipped' }}"
   when: locksmith_tools is defined and locksmith_tools is not skipped

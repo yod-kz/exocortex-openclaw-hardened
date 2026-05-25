@@ -37,10 +37,18 @@
     - host_boundary_effective.pipelock.enabled | default(true)
     - host_boundary_effective.pipelock.manage_launchd | default(true)
 
-- name: Check host Locksmith binary
+- name: Check host Locksmith daemon binary
   stat:
-    path: "{{ host_boundary_effective.locksmith.binary_path }}"
-  register: _host_boundary_locksmith_binary
+    path: "{{ host_boundary_effective.locksmith.daemon_binary_path | default(host_boundary_effective.locksmith.binary_path) }}"
+  register: _host_boundary_locksmith_daemon_binary
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.manage_launchd | default(true)
+
+- name: Check host Locksmith CLI binary
+  stat:
+    path: "{{ host_boundary_effective.locksmith.cli_binary_path | default('/usr/local/bin/locksmith') }}"
+  register: _host_boundary_locksmith_cli_binary
   when:
     - host_boundary_effective.locksmith.enabled | default(true)
     - host_boundary_effective.locksmith.manage_launchd | default(true)
@@ -63,11 +71,20 @@
     - host_boundary_effective.pipelock.enabled | default(true)
     - host_boundary_effective.pipelock.manage_launchd | default(true)
 
-- name: Require host Locksmith binary before managing LaunchDaemon
+- name: Require host Locksmith daemon binary before managing LaunchDaemon
   assert:
     that:
-      - _host_boundary_locksmith_binary.stat.exists
-    fail_msg: "Locksmith binary not found at {{ host_boundary_effective.locksmith.binary_path }}. Install it or set host_boundary.locksmith.binary_path before enabling manage_launchd."
+      - _host_boundary_locksmith_daemon_binary.stat.exists
+    fail_msg: "Locksmith daemon binary not found at {{ host_boundary_effective.locksmith.daemon_binary_path | default(host_boundary_effective.locksmith.binary_path) }}. Install locksmithd or set host_boundary.locksmith.daemon_binary_path before enabling manage_launchd."
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - host_boundary_effective.locksmith.manage_launchd | default(true)
+
+- name: Require host Locksmith CLI binary before managing LaunchDaemon
+  assert:
+    that:
+      - _host_boundary_locksmith_cli_binary.stat.exists
+    fail_msg: "Locksmith CLI binary not found at {{ host_boundary_effective.locksmith.cli_binary_path | default('/usr/local/bin/locksmith') }}. Install locksmith or set host_boundary.locksmith.cli_binary_path before enabling manage_launchd."
   when:
     - host_boundary_effective.locksmith.enabled | default(true)
     - host_boundary_effective.locksmith.manage_launchd | default(true)
@@ -119,7 +136,7 @@
             if (host_boundary_effective.pipelock.enabled | default(true)
               and host_boundary_effective.pipelock.manage_launchd | default(true))
             else [])
-          + ([host_boundary_effective.locksmith.binary_path]
+          + ([host_boundary_effective.locksmith.daemon_binary_path | default(host_boundary_effective.locksmith.binary_path)]
             if (host_boundary_effective.locksmith.enabled | default(true)
               and host_boundary_effective.locksmith.manage_launchd | default(true))
             else [])
@@ -314,6 +331,67 @@
       - host_boundary_untrusted_ip | length > 0
       - host_boundary_gateway_ip != host_boundary_untrusted_ip
     fail_msg: "Host boundary needs distinct gateway and untrusted VM source IPs."
+
+- name: Check existing host Pipelock config
+  become: true
+  stat:
+    path: "{{ host_boundary_effective.pipelock.config_path }}"
+  register: _host_boundary_existing_pipelock_config
+  when: host_boundary_effective.pipelock.enabled | default(true)
+
+- name: Archive existing host Pipelock config
+  become: true
+  copy:
+    src: "{{ host_boundary_effective.pipelock.config_path }}"
+    dest: "{{ host_boundary_effective.pipelock.config_path }}.bak.{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
+    remote_src: true
+    owner: root
+    group: wheel
+    mode: "0644"
+  when:
+    - host_boundary_effective.pipelock.enabled | default(true)
+    - _host_boundary_existing_pipelock_config.stat.exists
+
+- name: Check existing host Locksmith config
+  become: true
+  stat:
+    path: "{{ host_boundary_effective.locksmith.config_path }}"
+  register: _host_boundary_existing_locksmith_config
+  when: host_boundary_effective.locksmith.enabled | default(true)
+
+- name: Archive existing host Locksmith config
+  become: true
+  copy:
+    src: "{{ host_boundary_effective.locksmith.config_path }}"
+    dest: "{{ host_boundary_effective.locksmith.config_path }}.bak.{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
+    remote_src: true
+    owner: root
+    group: wheel
+    mode: "0640"
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - _host_boundary_existing_locksmith_config.stat.exists
+
+- name: Check existing root-only Locksmith wrapper
+  become: true
+  stat:
+    path: "{{ host_boundary_effective.locksmith.wrapper_path }}"
+  register: _host_boundary_existing_locksmith_wrapper
+  when: host_boundary_effective.locksmith.enabled | default(true)
+
+- name: Archive existing root-only Locksmith wrapper
+  become: true
+  copy:
+    src: "{{ host_boundary_effective.locksmith.wrapper_path }}"
+    dest: "{{ host_boundary_effective.locksmith.wrapper_path }}.bak.{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
+    remote_src: true
+    owner: root
+    group: wheel
+    mode: "0700"
+  no_log: true
+  when:
+    - host_boundary_effective.locksmith.enabled | default(true)
+    - _host_boundary_existing_locksmith_wrapper.stat.exists
 
 - name: Render host Pipelock config
   become: true

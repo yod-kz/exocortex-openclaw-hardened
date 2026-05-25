@@ -308,7 +308,7 @@ script covers most of these, but manual review is still valuable.
 - [ ] `pipelock` service is active: `systemctl is-active pipelock`
 - [ ] `nftables` service is enabled: `systemctl is-enabled nftables`
 - [ ] `fail2ban` service is active: `systemctl is-active fail2ban`
-- [ ] `locksmith` service is active (if enabled): `systemctl is-active locksmith`
+- [ ] `locksmith` service is active: `systemctl is-active locksmith`
 - [ ] `llamafirewall` service is active (if enabled): `systemctl is-active llamafirewall`
 - [ ] Telemetry services are active (if enabled): otel-collector, prometheus, phoenix, grafana, caddy
 

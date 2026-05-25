@@ -5,17 +5,19 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/locksmith --config /etc/locksmith/config.yaml
+ExecStart={{ locksmith.daemon_binary_path | default(locksmith.binary_path | default('/usr/local/bin/locksmithd')) }} --config /etc/locksmith/config.yaml
 EnvironmentFile=/etc/locksmith/locksmith.env
 Restart=always
 RestartSec=5
 
 User=locksmith
 Group=locksmith
+RuntimeDirectory=locksmith
+RuntimeDirectoryMode=0750
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/log/locksmith
+ReadWritePaths=/var/log/locksmith /var/lib/locksmith /run/locksmith
 PrivateTmp=true
 
 [Install]

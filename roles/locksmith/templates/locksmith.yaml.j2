@@ -2,31 +2,86 @@
 listen:
   host: "{{ locksmith.listen_host | default('127.0.0.1') }}"
   port: {{ locksmith.listen_port | default(9200) }}
+{% if locksmith.admin_socket_path | default('') != '' %}
+  admin_socket:
+    path: "{{ locksmith.admin_socket_path }}"
+{% endif %}
 
+{% if locksmith.operator_credentials_path | default('') != '' %}
+operator_credentials_path: "{{ locksmith.operator_credentials_path }}"
+
+{% endif %}
+{% if locksmith.database_path | default('') != '' %}
+database:
+  path: "{{ locksmith.database_path }}"
+
+{% endif %}
+{% if locksmith.audit is defined %}
+audit:
+  retention_days: {{ locksmith.audit.retention_days | default(90) }}
+  sweep_interval_seconds: {{ locksmith.audit.sweep_interval_seconds | default(3600) }}
+
+{% endif %}
 {% if locksmith.inbound_token | default('') != '' %}
 inbound_auth:
   mode: "bearer"
   token: "${LOCKSMITH_INBOUND_TOKEN}"
+
 {% endif %}
+egress_proxy: "http://127.0.0.1:{{ pipelock.listen.split(':')[-1] }}"
 
-egress_proxy: "http://127.0.0.1:{{ pipelock.listen.split(':')[1] }}"
+{% if locksmith.kamiwaza.enabled | default(false) %}
+{% set _kamiwaza_egress = locksmith.kamiwaza.egress | default((locksmith.kamiwaza.cloud | default(false)) | ternary('proxied', 'direct')) %}
+kamiwaza:
+  enabled: true
+{% if locksmith.kamiwaza.api_url | default('') != '' %}
+  api_url: "{{ locksmith.kamiwaza.api_url }}"
+{% endif %}
+{% if locksmith.kamiwaza.api_url_candidates | default([]) | length > 0 %}
+  api_url_candidates: {{ locksmith.kamiwaza.api_url_candidates | to_json }}
+{% endif %}
+{% if locksmith.kamiwaza.api_token | default('') != '' or locksmith.kamiwaza.api_token_from_env | default(false) %}
+  api_token: "${{ '{' }}{{ locksmith.kamiwaza.api_token_env | default('KAMIWAZA_API_KEY') }}{{ '}' }}"
+{% endif %}
+  tool_prefix: "{{ locksmith.kamiwaza.tool_prefix | default('kamiwaza') }}"
+  include_types: {{ locksmith.kamiwaza.include_types | default(['tool']) | to_json }}
+  verify_tls: {{ locksmith.kamiwaza.verify_tls | default(true) | to_json }}
+  cloud: {{ (_kamiwaza_egress == 'proxied') | to_json }}
+  timeout_seconds: {{ locksmith.kamiwaza.timeout_seconds | default(30) }}
 
+{% endif %}
 logging:
   level: "{{ locksmith.log_level | default('info') }}"
   file: "/var/log/locksmith/proxy.log"
 
+shutdown:
+  drain_window_seconds: {{ locksmith.shutdown.drain_window_seconds | default(30) }}
+
 tools:
 {% for tool in locksmith.tools %}
 {%   if tool.api_key | default('') != '' or tool.auth_required | default(true) == false %}
+{%     set _tool_egress = tool.egress | default((tool.cloud | default(true)) | ternary('proxied', 'direct')) %}
   - name: "{{ tool.name }}"
-    description: "{{ tool.description }}"
+    description: "{{ tool.description | default(tool.name) }}"
     upstream: "{{ tool.upstream }}"
-    cloud: {{ tool.cloud | default(true) | to_json }}
+    egress: "{{ _tool_egress }}"
 {% if tool.api_key | default('') != '' %}
     auth:
       header: "{{ tool.api_key_header | default('Authorization') }}"
-      value: "{{ (tool.api_key_prefix ~ ' ') if tool.api_key_prefix | default('') != '' else '' }}${{ '{' }}{{ tool.api_key_env }}{{ '}' }}"
+      value:
+        from_env:
+          var: "{{ tool.api_key_env }}"
+{% if tool.api_key_prefix | default('') != '' %}
+          prefix: "{{ tool.api_key_prefix }} "
 {% endif %}
-    timeout_seconds: {{ tool.timeout_seconds | default(30) }}
+{% endif %}
+    timeouts:
+      request_seconds: {{ tool.timeouts.request_seconds | default(tool.timeout_seconds | default(locksmith.timeout_seconds | default(30))) }}
+      idle_seconds: {{ tool.timeouts.idle_seconds | default(tool.idle_timeout_seconds | default(locksmith.idle_timeout_seconds | default(60))) }}
+    body_limit_bytes: {{ tool.body_limit_bytes | default(locksmith.body_limit_bytes | default(10485760)) }}
+{% if tool.response is defined %}
+    response:
+{{ tool.response | to_nice_yaml(indent=2) | indent(6, true) }}
+{% endif %}
 {%   endif %}
 {% endfor %}

@@ -111,7 +111,7 @@
       - --
       - sh
       - -lc
-      - "curl -fsS --max-time {{ host_boundary_effective.verify.timeout_seconds }} http://{{ host_boundary_effective.verify.guest_host_alias }}:{{ host_boundary_locksmith_port }}/health >/dev/null"
+      - "curl -fsS --max-time {{ host_boundary_effective.verify.timeout_seconds }} http://{{ host_boundary_effective.verify.guest_host_alias }}:{{ host_boundary_locksmith_port }}/livez >/dev/null"
   changed_when: false
   when:
     - host_boundary_effective.lima.enabled | default(true)
@@ -159,7 +159,7 @@
       - --
       - sh
       - -lc
-      - "! curl -fsS --max-time {{ host_boundary_effective.verify.timeout_seconds }} http://{{ host_boundary_effective.verify.guest_host_alias }}:{{ host_boundary_locksmith_port }}/health >/dev/null"
+      - "! curl -fsS --max-time {{ host_boundary_effective.verify.timeout_seconds }} http://{{ host_boundary_effective.verify.guest_host_alias }}:{{ host_boundary_locksmith_port }}/livez >/dev/null"
   changed_when: false
   when:
     - host_boundary_effective.lima.enabled | default(true)

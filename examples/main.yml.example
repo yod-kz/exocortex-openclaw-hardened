@@ -237,42 +237,82 @@ llamafirewall:
 # and forwards to the upstream, routing cloud requests via Pipelock.
 locksmith:
   enabled: true
+  install_method: "auto"
   version: "latest"
+  daemon_binary_path: "/usr/local/bin/locksmithd"
+  cli_binary_path: "/usr/local/bin/locksmith"
+  source_dir: "{{ playbook_dir }}/../exocortex-agent-locksmith"
   listen_host: "127.0.0.1"
   listen_port: 9200
   log_level: "info"
   inbound_token: "{{ vault_locksmith_inbound_token | default('') }}"
+  oauth_sealing_key: "{{ vault_locksmith_oauth_sealing_key | default('') }}"
+
+  kamiwaza:
+    enabled: false
+    api_url: "https://localhost/api"
+    api_token: "{{ vault_kamiwaza_api_key | default('') }}"
+    api_token_from_env: false
+    verify_tls: true
+    # Set verify_tls false only for local self-signed dev installs.
+    projected_tools:
+      - slug: "kamiwaza_tool_z_19607be6_search"
+        description: "Search via the Kamiwaza tool-z Serper MCP extension"
+        mode: "json"
+        parameters:
+          type: "object"
+          properties:
+            query:
+              type: "string"
+            category:
+              type: "string"
+              enum: ["search", "news", "images", "videos", "places", "maps", "shopping", "scholar", "patents"]
+              default: "search"
+            gl:
+              type: "string"
+              default: "us"
+          required: ["query"]
+          additionalProperties: true
 
   tools:
     - name: "github"
       description: "GitHub REST API"
       upstream: "https://api.github.com"
-      cloud: true
+      egress: "proxied"
       api_key: "{{ vault_github_token | default('') }}"
       api_key_header: "Authorization"
       api_key_prefix: "Bearer"
       api_key_env: "GITHUB_TOKEN"
-      timeout_seconds: 30
+      timeouts:
+        request_seconds: 30
+        idle_seconds: 60
+      body_limit_bytes: 10485760
 
     - name: "tavily"
       description: "Tavily web search"
       upstream: "https://api.tavily.com"
-      cloud: true
+      egress: "proxied"
       api_key: "{{ vault_tavily_api_key | default('') }}"
       api_key_header: "x-api-key"
       api_key_prefix: ""
       api_key_env: "TAVILY_API_KEY"
-      timeout_seconds: 15
+      timeouts:
+        request_seconds: 15
+        idle_seconds: 60
+      body_limit_bytes: 10485760
 
     - name: "firecrawl"
       description: "Firecrawl web scraping"
       upstream: "https://api.firecrawl.dev"
-      cloud: true
+      egress: "proxied"
       api_key: "{{ vault_firecrawl_api_key | default('') }}"
       api_key_header: "Authorization"
       api_key_prefix: "Bearer"
       api_key_env: "FIRECRAWL_API_KEY"
-      timeout_seconds: 60
+      timeouts:
+        request_seconds: 60
+        idle_seconds: 60
+      body_limit_bytes: 10485760
 
 # ── Systemd ──────────────────────────────────────────────────
 openclaw_binary: "/home/openclaw/.local/bin/openclaw"

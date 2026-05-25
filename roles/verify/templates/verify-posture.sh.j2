@@ -62,13 +62,22 @@ check "egress works via pipelock (fetch)" "curl -sf --max-time 5 'http://{{ pipe
 check "egress works via pipelock (CONNECT)" "curl -sf --proxy http://{{ pipelock.listen }} --max-time 5 https://api.telegram.org/"
 check "docker pull via pipelock"         "sudo docker pull --quiet debian:bookworm-slim"
 
-{% if locksmith.enabled | default(false) %}
+{% if locksmith.enabled | default(true) %}
 {% set locksmith_base = "http://" ~ locksmith.listen_host | default('127.0.0.1') ~ ":" ~ locksmith.listen_port | default(9200) %}
 echo ""
 echo -e "${CYAN}Agent Locksmith${NC}"
+check "locksmithd binary exists"               "test -x {{ locksmith.daemon_binary_path | default(locksmith.binary_path | default('/usr/local/bin/locksmithd')) }}"
+check "locksmith CLI binary exists"            "test -x {{ locksmith.cli_binary_path | default('/usr/local/bin/locksmith') }}"
+check "locksmithd binary is daemon"            "{{ locksmith.daemon_binary_path | default(locksmith.binary_path | default('/usr/local/bin/locksmithd')) }} --help | grep -q 'Agent Locksmith daemon'"
+check "locksmith CLI responds"                 "{{ locksmith.cli_binary_path | default('/usr/local/bin/locksmith') }} --version | grep -q 'locksmith'"
 check "locksmith service running"              "systemctl is-active locksmith"
 check "locksmith listening on :{{ locksmith.listen_port | default(9200) }}"  "ss -tlnp | grep -q ':{{ locksmith.listen_port | default(9200) }}'"
-check "locksmith health endpoint"              "curl -sf --max-time 3 {{ locksmith_base }}/health"
+check "locksmith livez endpoint"               "curl -sf --max-time 3 {{ locksmith_base }}/livez"
+check "locksmith readyz endpoint"              "curl -sf --max-time 3 {{ locksmith_base }}/readyz"
+check "locksmith version endpoint"             "curl -sf --max-time 3 {{ locksmith_base }}/version | grep -q 'version'"
+check "locksmith config uses v2 egress"        "grep -q 'egress:' /etc/locksmith/config.yaml"
+check "locksmith config uses v2 timeouts"      "grep -q 'request_seconds:' /etc/locksmith/config.yaml"
+check "locksmith routes through pipelock"      "grep -q 'egress_proxy: \"http://127.0.0.1:{{ pipelock.listen.split(':')[-1] }}\"' /etc/locksmith/config.yaml"
 {% if locksmith.inbound_token | default('') != '' %}
 check "locksmith rejects unauthenticated"      "curl -s -o /dev/null -w '%{http_code}' --max-time 3 {{ locksmith_base }}/tools | grep -q '^401$'"
 check "locksmith token loaded"                 "test -n \"${LOCKSMITH_INBOUND_TOKEN:-}\""

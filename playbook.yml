@@ -66,7 +66,7 @@
 
     - role: locksmith
       tags: [phase2, locksmith]
-      when: locksmith.enabled | default(false)
+      when: locksmith.enabled | default(true)
 
     - role: nftables
       tags: [phase2, nftables]

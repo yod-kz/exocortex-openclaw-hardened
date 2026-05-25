@@ -152,7 +152,7 @@ Docker runtime; mitigation details are documented in
 | [OpenClaw](https://github.com/openclaw) | AI agent platform | npm release or source build |
 | [Pipelock](https://github.com/SentientSwarm/pipelock) | HTTPS proxy with domain allowlist + DLP | Container image |
 | [LlamaFirewall](https://github.com/meta-llama/PurpleLlama) | Inference proxy, prompt injection scanning, budget | Python (venv) |
-| [agent-locksmith](https://github.com/SentientSwarm/agent-locksmith) | Credential injection proxy | Container image |
+| [agent-locksmith](https://github.com/SentientSwarm/agent-locksmith) | Credential injection proxy | `locksmithd` daemon + `locksmith` CLI binaries |
 | Docker | Container runtime | System package |
 | gVisor (runsc) | Sandboxed container runtime | System package |
 | Ollama | Local embedding models (optional) | System package |
@@ -162,6 +162,7 @@ Docker runtime; mitigation details are documented in
 
 - [Architecture](docs/architecture.md) -- System design and security model
 - [Host-Side Pipelock and Locksmith](docs/host-side-pipelock-locksmith.md) -- Target architecture for host-enforced gateway/untrusted VM deployments
+- [Locksmith v2 in OpenClaw Hardened](docs/locksmith-v2-openclaw-story.md) -- Integration story and acceptance criteria for the default Pipelock + Locksmith boundary
 - [Installation](docs/installation.md) -- Detailed setup walkthrough
 - [Operations](docs/operations.md) -- Day-to-day management, upgrades, troubleshooting
 - [Security](docs/security.md) -- Threat model, layer details, sandbox mitigations

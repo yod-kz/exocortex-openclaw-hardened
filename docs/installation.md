@@ -310,18 +310,23 @@ telemetry:
 ./run.sh --ask-vault-pass --tags telemetry
 ```
 
-### Enable Locksmith (credential proxy)
+### Configure Locksmith (credential proxy)
 
 ```yaml
 locksmith:
   enabled: true
   tools:
     - name: "github"
+      description: "GitHub REST API"
       upstream: "https://api.github.com"
-      cloud: true
-      auth:
-        header: "Authorization"
-        value: "Bearer {{ vault_github_token }}"
+      egress: "proxied"
+      api_key: "{{ vault_github_token }}"
+      api_key_header: "Authorization"
+      api_key_prefix: "Bearer"
+      api_key_env: "GITHUB_TOKEN"
+      timeouts:
+        request_seconds: 30
+        idle_seconds: 60
 ```
 
 ```bash
