@@ -335,7 +335,9 @@ locksmith:
 # Preferred Slack agent tool path for user-token (xoxp) workflows.
 # Runs outside OpenClaw as a host service, reads the Slack token from
 # the host Locksmith env file, routes Slack egress through Pipelock,
-# and exposes only contextual tools to OpenClaw over local MCP.
+# and exposes only contextual tools to OpenClaw over local MCP. This
+# is not a Slack ingress channel; incoming Slack events still require
+# native Slack Socket Mode or a separate channel bridge.
 slack_context_mcp:
   enabled: false
   package: "@arvoretech/slack-advanced-mcp"
