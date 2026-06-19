@@ -158,6 +158,7 @@ Credential-injecting reverse proxy for tool APIs.
 | `api_key_prefix` | string | yes | Prefix before key value (empty string for none) |
 | `auth_required` | bool | no | Set false only for intentionally unauthenticated tools; defaults to true |
 | `api_key_env` | string | no | Environment variable name exposed to containers |
+| `force_replace` | bool | no | When true, Locksmith strips any caller-supplied auth header and fails closed if the replacement credential is unavailable |
 | `timeouts.request_seconds` | int | no | Total request timeout |
 | `timeouts.idle_seconds` | int | no | Per-read idle timeout for streaming responses |
 | `body_limit_bytes` | int | no | Maximum request body size Locksmith accepts for the tool |

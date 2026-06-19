@@ -67,6 +67,8 @@ _host_boundary_defaults:
       - "github.com"
       - "*.github.com"
       - "*.githubusercontent.com"
+      - "slack.com"
+      - "*.slack.com"
       - "pypi.org"
       - "files.pythonhosted.org"
       - "registry.npmjs.org"

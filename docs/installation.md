@@ -324,6 +324,7 @@ locksmith:
       api_key_header: "Authorization"
       api_key_prefix: "Bearer"
       api_key_env: "GITHUB_TOKEN"
+      force_replace: true
       timeouts:
         request_seconds: 30
         idle_seconds: 60
@@ -336,6 +337,7 @@ locksmith:
       api_key_header: "Authorization"
       api_key_prefix: "Bearer"
       api_key_env: "SLACK_BOT_TOKEN"
+      force_replace: true
       timeouts:
         request_seconds: 60
         idle_seconds: 60
@@ -343,7 +345,9 @@ locksmith:
 
 When Slack is configured only as a Locksmith Web API tool, OpenClaw exposes it
 to agents as `locksmith_slack`. This does not configure the native Slack channel
-runtime or put the Slack token inside the OpenClaw container.
+runtime or put the Slack token inside the OpenClaw container. `force_replace:
+true` means placeholder auth headers are stripped and replaced by Locksmith, and
+missing Locksmith-side credentials fail closed instead of reaching Slack/GitHub.
 
 ```bash
 ./run.sh --ask-vault-pass --tags locksmith

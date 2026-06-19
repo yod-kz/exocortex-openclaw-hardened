@@ -112,6 +112,8 @@ pipelock:
     - "github.com"
     - "*.github.com"
     - "*.githubusercontent.com"
+    - "slack.com"
+    - "*.slack.com"
     - "pypi.org"
     - "files.pythonhosted.org"
     - "registry.npmjs.org"
@@ -283,6 +285,7 @@ locksmith:
       api_key_header: "Authorization"
       api_key_prefix: "Bearer"
       api_key_env: "GITHUB_TOKEN"
+      force_replace: true
       timeouts:
         request_seconds: 30
         idle_seconds: 60
@@ -296,6 +299,7 @@ locksmith:
       api_key_header: "Authorization"
       api_key_prefix: "Bearer"
       api_key_env: "SLACK_BOT_TOKEN"
+      force_replace: true
       timeouts:
         request_seconds: 60
         idle_seconds: 60

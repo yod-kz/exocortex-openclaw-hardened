@@ -76,6 +76,7 @@ tools:
 {% if tool.api_key | default('') != '' %}
     auth:
       header: "{{ tool.api_key_header | default('Authorization') }}"
+      force_replace: {{ tool.force_replace | default(false) | to_json }}
       value:
         from_env:
           var: "{{ tool.api_key_env }}"
