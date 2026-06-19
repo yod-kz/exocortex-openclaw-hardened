@@ -35,6 +35,16 @@
 {%     set _ = _chans.update({name: cfg}) %}
 {%   endif %}
 {% endfor %}
+{% set _locksmith_projected_tool_names = [] %}
+{% if locksmith.enabled | default(true) %}
+{%   for tool in locksmith.tools | default([]) %}
+{%     if tool.projected | default(true) and (tool.api_key | default('') != '' or tool.auth_required | default(true) == false) %}
+{%       set _ = _locksmith_projected_tool_names.append(tool.name) %}
+{%     endif %}
+{%   endfor %}
+{% endif %}
+{% set _native_slack_configured = _agent_slack | length > 0 or 'slack' in _chans %}
+{% set _disable_bundled_slack_skill = not _native_slack_configured and 'slack' in _locksmith_projected_tool_names %}
 {# ── Resolve default agent (for workspace path) ─────────────────── #}
 {% set _default_agent = openclaw_agents | default([]) | selectattr('default', 'defined') | selectattr('default', 'equalto', true) | first | default(openclaw_agents | default([]) | first | default(none)) %}
 {
@@ -148,6 +158,15 @@
   "tools": {
     "profile": "{{ openclaw.tools_profile }}"
   },
+{% if _disable_bundled_slack_skill %}
+  "skills": {
+    "entries": {
+      "slack": {
+        "enabled": false
+      }
+    }
+  },
+{% endif %}
   "env": {
     "HTTP_PROXY": "{{ openclaw.fetch_proxy }}",
     "HTTPS_PROXY": "{{ openclaw.fetch_proxy }}",

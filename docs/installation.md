@@ -341,6 +341,10 @@ locksmith:
         idle_seconds: 60
 ```
 
+When Slack is configured only as a Locksmith Web API tool, OpenClaw exposes it
+to agents as `locksmith_slack`. This does not configure the native Slack channel
+runtime or put the Slack token inside the OpenClaw container.
+
 ```bash
 ./run.sh --ask-vault-pass --tags locksmith
 ```
