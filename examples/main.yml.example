@@ -331,6 +331,33 @@ locksmith:
         idle_seconds: 60
       body_limit_bytes: 10485760
 
+# ── Contextual Slack MCP ─────────────────────────────────────
+# Preferred Slack agent tool path for user-token (xoxp) workflows.
+# Runs outside OpenClaw as a host service, reads the Slack token from
+# the host Locksmith env file, routes Slack egress through Pipelock,
+# and exposes only contextual tools to OpenClaw over local MCP.
+slack_context_mcp:
+  enabled: false
+  package: "@arvoretech/slack-advanced-mcp"
+  package_version: "1.12.0"
+  listen_host: "127.0.0.1"
+  listen_port: 13080
+  env_file: "/home/openclaw/.config/locksmith/locksmith.env"
+  proxy_url: "http://127.0.0.1:8888"
+  allowed_tools:
+    - search_users
+    - get_user_profile
+    - get_user_info
+    - send_dm
+    - send_channel_message
+    - get_dm_history
+    - list_channel_messages
+    - get_thread_from_link
+    - edit_message
+    - add_reaction
+    - remove_reaction
+    - wait_for_reply
+
 # ── Systemd ──────────────────────────────────────────────────
 openclaw_binary: "/home/openclaw/.local/bin/openclaw"
 

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="{{ slack_context_mcp.npm_prefix }}/bin:/usr/local/bin:/usr/bin:/bin"
+export HOME="{{ openclaw_home }}"
+export SLACK_MCP_PORT="${SLACK_MCP_PORT:-{{ slack_context_mcp.listen_port }}}"
+
+exec {{ slack_context_mcp.npm_prefix }}/bin/supergateway \
+  --stdio "{{ slack_context_mcp.npm_prefix }}/bin/openclaw-slack-context-mcp-stdio" \
+  --outputTransport streamableHttp \
+  --port "$SLACK_MCP_PORT" \
+  --streamableHttpPath {{ slack_context_mcp.streamable_http_path }} \
+  --healthEndpoint {{ slack_context_mcp.health_path }} \
+  --logLevel none

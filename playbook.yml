@@ -31,6 +31,7 @@
         docker: "{{ _docker_defaults | default({}) | combine(docker | default({}), recursive=True) }}"
         pipelock: "{{ _pipelock_defaults | default({}) | combine(pipelock | default({}), recursive=True) }}"
         locksmith: "{{ _locksmith_defaults | default({}) | combine(locksmith | default({}), recursive=True) }}"
+        slack_context_mcp: "{{ _slack_context_mcp_defaults | default({}) | combine(slack_context_mcp | default({}), recursive=True) }}"
         llamafirewall: "{{ _llamafirewall_defaults | default({}) | combine(llamafirewall | default({}), recursive=True) }}"
         openclaw: "{{ _openclaw_defaults | default({}) | combine(openclaw | default({}), recursive=True) }}"
         ollama: "{{ _ollama_defaults | default({}) | combine(ollama | default({}), recursive=True) }}"
@@ -67,6 +68,10 @@
     - role: locksmith
       tags: [phase2, locksmith]
       when: locksmith.enabled | default(true)
+
+    - role: slack_context_mcp
+      tags: [phase2, slack, mcp]
+      when: slack_context_mcp.enabled | default(false)
 
     - role: nftables
       tags: [phase2, nftables]

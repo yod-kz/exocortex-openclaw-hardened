@@ -349,8 +349,26 @@ runtime or put the Slack token inside the OpenClaw container. `force_replace:
 true` means placeholder auth headers are stripped and replaced by Locksmith, and
 missing Locksmith-side credentials fail closed instead of reaching Slack/GitHub.
 
+For user-token Slack workflows, prefer the contextual Slack MCP instead of the
+native Slack channel runtime. It runs outside OpenClaw, reads the xoxp token from
+the host Locksmith env file, routes Slack egress through Pipelock, and exposes a
+small contextual tool surface instead of channel-list/raw-API tools:
+
+```yaml
+slack_context_mcp:
+  enabled: true
+  env_file: "/home/openclaw/.config/locksmith/locksmith.env"
+  proxy_url: "http://127.0.0.1:8888"
+```
+
+The default allowlist exposes user search/profile, DM send/history, channel send
+by `#name` or ID, bounded channel message reads, thread-from-link, edit, reaction,
+and wait-for-reply tools. It intentionally does not expose channel listing,
+file-path upload/download, delete-message, create-channel, or raw Slack API
+methods.
+
 ```bash
-./run.sh --ask-vault-pass --tags locksmith
+./run.sh --ask-vault-pass --tags locksmith,slack,mcp,config,service
 ```
 
 ## Upgrading from openclaw-deploy

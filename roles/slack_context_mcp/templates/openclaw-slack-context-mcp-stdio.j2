@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="{{ slack_context_mcp.npm_prefix }}/bin:/usr/local/bin:/usr/bin:/bin"
+export HOME="{{ openclaw_home }}"
+
+LOCKSMITH_ENV="${LOCKSMITH_ENV:-{{ slack_context_mcp.env_file }}}"
+if [[ -r "$LOCKSMITH_ENV" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$LOCKSMITH_ENV"
+  set +a
+fi
+
+SLACK_USER_TOKEN_VALUE="${SLACK_USER_TOKEN:-${SLACK_BOT_TOKEN:-}}"
+if [[ -z "$SLACK_USER_TOKEN_VALUE" ]]; then
+  echo "SLACK_USER_TOKEN or SLACK_BOT_TOKEN must be set in host env" >&2
+  exit 1
+fi
+
+export SLACK_USER_TOKEN="$SLACK_USER_TOKEN_VALUE"
+export SLACK_USERS_CACHE_PATH="${SLACK_USERS_CACHE_PATH:-{{ slack_context_mcp.users_cache_path }}}"
+export SLACK_USERS_CACHE_TTL_MINUTES="${SLACK_USERS_CACHE_TTL_MINUTES:-{{ slack_context_mcp.users_cache_ttl_minutes }}}"
+export SLACK_MCP_PROXY="${SLACK_MCP_PROXY:-{{ slack_context_mcp.proxy_url }}}"
+export SLACK_ADVANCED_MCP_ENABLED_TOOLS="${SLACK_ADVANCED_MCP_ENABLED_TOOLS:-{{ slack_context_mcp.allowed_tools | join(',') }}}"
+
+unset SLACK_BOT_TOKEN
+unset GITHUB_TOKEN
+
+mkdir -p "$(dirname "$SLACK_USERS_CACHE_PATH")"
+
+exec node \
+  --import {{ openclaw_home }}/.local/lib/openclaw/slack-undici-proxy-bootstrap.mjs \
+  {{ slack_context_mcp.npm_prefix }}/bin/slack-advanced-mcp

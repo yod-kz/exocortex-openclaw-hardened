@@ -175,6 +175,22 @@
   "messages": {
     "ackReactionScope": "group-mentions"
   },
+{% set _mcp_servers = {} %}
+{% if slack_context_mcp.enabled | default(false) %}
+{%   set _slack_context_server = {
+       'url': 'http://' ~ (slack_context_mcp.listen_host | default('127.0.0.1')) ~ ':' ~ (slack_context_mcp.listen_port | default(13080)) ~ (slack_context_mcp.streamable_http_path | default('/mcp')),
+       'transport': 'streamable-http',
+       'connectTimeout': slack_context_mcp.connect_timeout | default(10),
+       'timeout': slack_context_mcp.timeout | default(90),
+       'toolFilter': {
+         'include': slack_context_mcp.allowed_tools | default([])
+       }
+     } %}
+{%   set _ = _mcp_servers.update({'slack-context': _slack_context_server}) %}
+{% endif %}
+  "mcp": {
+    "servers": {{ _mcp_servers | to_nice_json(indent=2) | indent(6, false) }}
+  },
   "commands": {
     "native": "auto",
     "nativeSkills": "auto",

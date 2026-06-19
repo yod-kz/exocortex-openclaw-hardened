@@ -121,6 +121,11 @@ Each agent can have its own Slack and Telegram bot tokens. OpenClaw runs in
 multi-account mode with per-agent routing (bindings), so multiple agents
 share a host without sharing channel identities.
 
+For Slack user-token workflows, `slack_context_mcp` runs an external contextual
+Slack MCP service on the host. It keeps the xoxp token outside OpenClaw, routes
+Slack egress through Pipelock, and exposes contextual tools rather than raw
+channel listing or raw Slack API methods.
+
 ### Local Embeddings
 
 When Ollama is enabled, agents use local embedding models for memory search

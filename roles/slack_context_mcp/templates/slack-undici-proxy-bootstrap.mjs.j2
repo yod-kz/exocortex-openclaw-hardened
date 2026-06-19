@@ -1,0 +1,24 @@
+import { ProxyAgent, setGlobalDispatcher } from "{{ slack_context_mcp.npm_prefix }}/lib/node_modules/undici/index.js";
+import { McpServer } from "{{ slack_context_mcp.npm_prefix }}/lib/node_modules/{{ slack_context_mcp.package }}/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js";
+
+const proxyUrl = process.env.SLACK_MCP_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "";
+const enabledTools = new Set(
+  (process.env.SLACK_ADVANCED_MCP_ENABLED_TOOLS || "")
+    .split(",")
+    .map((tool) => tool.trim())
+    .filter(Boolean),
+);
+
+if (proxyUrl) {
+  setGlobalDispatcher(new ProxyAgent(proxyUrl));
+}
+
+if (enabledTools.size > 0) {
+  const registerTool = McpServer.prototype.registerTool;
+  McpServer.prototype.registerTool = function openClawFilteredRegisterTool(name, ...args) {
+    if (!enabledTools.has(String(name))) {
+      return undefined;
+    }
+    return registerTool.call(this, name, ...args);
+  };
+}

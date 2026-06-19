@@ -1,0 +1,71 @@
+---
+- name: Install contextual Slack MCP packages
+  command: >
+    npm install -g --prefix {{ slack_context_mcp.npm_prefix }}
+    {{ slack_context_mcp.package }}@{{ slack_context_mcp.package_version }}
+    supergateway@{{ slack_context_mcp.supergateway_version }}
+    undici@{{ slack_context_mcp.undici_version }}
+  become: true
+  become_user: "{{ openclaw_user }}"
+  environment:
+    HOME: "{{ openclaw_home }}"
+    PATH: "{{ slack_context_mcp.npm_prefix }}/bin:/usr/local/bin:/usr/bin:/bin"
+  register: slack_context_mcp_npm
+  changed_when: "'added' in slack_context_mcp_npm.stdout or 'changed' in slack_context_mcp_npm.stdout or 'removed' in slack_context_mcp_npm.stdout"
+
+- name: Ensure Slack MCP local directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: "0700"
+  loop:
+    - "{{ slack_context_mcp.npm_prefix }}/bin"
+    - "{{ openclaw_home }}/.local/lib/openclaw"
+    - "{{ slack_context_mcp.users_cache_path | dirname }}"
+
+- name: Force Supergateway streamable HTTP listener to loopback
+  replace:
+    path: "{{ slack_context_mcp.npm_prefix }}/lib/node_modules/supergateway/dist/gateways/stdioToStatelessStreamableHttp.js"
+    regexp: 'app\.listen\(port(?:,\s*"[^"]+")?,\s*\(\) => \{'
+    replace: 'app.listen(port, "{{ slack_context_mcp.listen_host }}", () => {'
+
+- name: Write Slack MCP proxy bootstrap
+  template:
+    src: slack-undici-proxy-bootstrap.mjs.j2
+    dest: "{{ openclaw_home }}/.local/lib/openclaw/slack-undici-proxy-bootstrap.mjs"
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: "0600"
+
+- name: Write Slack MCP stdio launcher
+  template:
+    src: openclaw-slack-context-mcp-stdio.j2
+    dest: "{{ slack_context_mcp.npm_prefix }}/bin/openclaw-slack-context-mcp-stdio"
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: "0700"
+
+- name: Write Slack MCP HTTP gateway launcher
+  template:
+    src: openclaw-slack-context-mcp-gateway.j2
+    dest: "{{ slack_context_mcp.npm_prefix }}/bin/openclaw-slack-context-mcp-gateway"
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: "0700"
+
+- name: Write Slack MCP systemd service
+  template:
+    src: openclaw-slack-context-mcp.service.j2
+    dest: /etc/systemd/system/openclaw-slack-context-mcp.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable and start Slack MCP service
+  systemd:
+    name: openclaw-slack-context-mcp
+    enabled: true
+    state: started
+    daemon_reload: true

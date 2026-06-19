@@ -1,0 +1,31 @@
+---
+_slack_context_mcp_defaults:
+  enabled: false
+  npm_prefix: "{{ openclaw_home }}/.local"
+  package: "@arvoretech/slack-advanced-mcp"
+  package_version: "1.12.0"
+  supergateway_version: "3.4.3"
+  undici_version: "7.16.0"
+  listen_host: "127.0.0.1"
+  listen_port: 13080
+  streamable_http_path: "/mcp"
+  health_path: "/healthz"
+  env_file: "{{ openclaw_home }}/.config/locksmith/locksmith.env"
+  proxy_url: "http://127.0.0.1:{{ pipelock.listen.split(':')[-1] | default('8888') }}"
+  users_cache_path: "{{ openclaw_home }}/.cache/openclaw-slack-advanced-mcp/users_cache.json"
+  users_cache_ttl_minutes: 60
+  connect_timeout: 10
+  timeout: 90
+  allowed_tools:
+    - search_users
+    - get_user_profile
+    - get_user_info
+    - send_dm
+    - send_channel_message
+    - get_dm_history
+    - list_channel_messages
+    - get_thread_from_link
+    - edit_message
+    - add_reaction
+    - remove_reaction
+    - wait_for_reply

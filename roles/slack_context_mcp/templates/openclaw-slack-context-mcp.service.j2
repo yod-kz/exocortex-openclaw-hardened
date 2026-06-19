@@ -1,0 +1,27 @@
+[Unit]
+Description=Contextual Slack MCP gateway for OpenClaw
+After=network-online.target pipelock.service
+Wants=network-online.target pipelock.service
+
+[Service]
+Type=simple
+User={{ openclaw_user }}
+Group={{ openclaw_user }}
+WorkingDirectory={{ openclaw_home }}
+ExecStart={{ slack_context_mcp.npm_prefix }}/bin/openclaw-slack-context-mcp-gateway
+Restart=on-failure
+RestartSec=3
+Environment=HOME={{ openclaw_home }}
+Environment=PATH={{ slack_context_mcp.npm_prefix }}/bin:/usr/local/bin:/usr/bin:/bin
+Environment=LOCKSMITH_ENV={{ slack_context_mcp.env_file }}
+
+# Keep the MCP gateway and its child on host loopback. Slack egress goes to
+# Pipelock on loopback; no raw Slack token is placed in OpenClaw config.
+NoNewPrivileges=true
+PrivateTmp=true
+IPAddressDeny=any
+IPAddressAllow=127.0.0.0/8
+IPAddressAllow=::1/128
+
+[Install]
+WantedBy=multi-user.target
