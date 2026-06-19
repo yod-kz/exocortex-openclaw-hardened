@@ -526,7 +526,7 @@ All secrets are stored in `group_vars/agent_hosts/vault.yml` (encrypted with
 | `vault_<agentid>_slack_app_token` | `openclaw_agents[].slack.app_token` |
 | `vault_<agentid>_telegram_bot_token` | `openclaw_agents[].telegram.bot_token` |
 | `vault_telegram_bot_token` | *(deprecated)* Legacy `openclaw_channels.telegram.botToken` |
-| `vault_slack_bot_token` | *(deprecated)* Legacy `openclaw_channels.slack.botToken` |
+| `vault_slack_bot_token` | Legacy `openclaw_channels.slack.botToken`; also usable for `locksmith.tools[].api_key` (Slack Web API) |
 | `vault_anthropic_api_key` | `inference.endpoints[].api_key` (Anthropic) |
 | `vault_openai_api_key` | `inference.endpoints[].api_key` (OpenAI) |
 | `vault_tokenator_pat` | `inference.endpoints[].api_key` (Kamiwaza tokenator) |

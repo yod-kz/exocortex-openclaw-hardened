@@ -327,6 +327,18 @@ locksmith:
       timeouts:
         request_seconds: 30
         idle_seconds: 60
+
+    - name: "slack"
+      description: "Slack Web API"
+      upstream: "https://slack.com/api"
+      egress: "proxied"
+      api_key: "{{ vault_slack_bot_token }}"
+      api_key_header: "Authorization"
+      api_key_prefix: "Bearer"
+      api_key_env: "SLACK_BOT_TOKEN"
+      timeouts:
+        request_seconds: 60
+        idle_seconds: 60
 ```
 
 ```bash
