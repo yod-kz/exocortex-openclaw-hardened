@@ -188,15 +188,15 @@ What this does NOT prevent:
 
 ### Storage
 
-All secrets are stored in `group_vars/agent_hosts/vault.yml`, encrypted with
-`ansible-vault` (AES-256). The vault file is decrypted only during Ansible
-runs and secrets are injected into templates at deployment time.
+Secrets can be stored in `group_vars/agent_hosts/vault.yml`, encrypted with
+`ansible-vault` (AES-256), or in root-readable Locksmith environment files
+listed under `locksmith.env_files`. Vault values are decrypted only during
+Ansible runs. Locksmith env files are sourced by `locksmith.service` and are not
+mounted into OpenClaw.
 
 ### Naming convention
 
 Per-agent secrets follow a consistent pattern:
-- `vault_<agentid>_slack_bot_token`
-- `vault_<agentid>_slack_app_token`
 - `vault_<agentid>_telegram_bot_token`
 
 Shared secrets use descriptive names:
@@ -204,17 +204,27 @@ Shared secrets use descriptive names:
 - `vault_openai_api_key`
 - `vault_locksmith_inbound_token`
 - `vault_openclaw_gateway_token`
+- `vault_slack_bot_token` / `SLACK_BOT_TOKEN`
+- `vault_slack_app_token` / `SLACK_APP_TOKEN`
 
 ### Credential injection
 
 Locksmith acts as a credential-injecting reverse proxy. The flow:
 
-1. Agent makes a request to `http://localhost:9200/tools/<tool-name>/...`
+1. Agent makes a request to `http://localhost:9200/api/<tool-name>/...`
 2. Agent authenticates with a bearer token (the `inbound_token`)
 3. Locksmith looks up the tool's upstream URL and API key
 4. Locksmith forwards the request with the real API key injected in the
    configured header
 5. The agent never sees the upstream API key
+
+Native Slack uses a stricter SDK credential-transport path because Slack clients
+must put their token in `Authorization: Bearer ...`. OpenClaw receives fake
+Slack-shaped handles, such as `xoxb-locksmith-mira`, and sends Slack SDK calls to
+`/transport/slack-bot/...` or `/transport/slack-app/...`. Locksmith accepts only
+the configured fake handle for that transport tool, replaces it with the real
+`SLACK_BOT_TOKEN` or `SLACK_APP_TOKEN`, and routes the outbound Slack call
+through Pipelock. Missing real credentials fail closed.
 
 Locksmith's config is owned by `root:locksmith 0640` -- the agent cannot
 read it.

@@ -58,14 +58,98 @@ shutdown:
   drain_window_seconds: {{ locksmith.shutdown.drain_window_seconds | default(30) }}
 
 tools:
+{% set _slack_native = locksmith.slack_native | default({}) %}
+{% set _slack_native_enabled = _slack_native.enabled | default(true) %}
+{% set _slack_bot_handles = _slack_native.bot_handles | default([]) | list %}
+{% set _slack_app_handles = _slack_native.app_handles | default([]) | list %}
+{% set _slack_user_handles = _slack_native.user_handles | default([]) | list %}
+{% if _slack_native_enabled %}
+{%   for agent in openclaw_agents | default([]) %}
+{%     if agent.slack is defined %}
+{%       set _agent_slack = agent.slack | default({}) %}
+{%       set _agent_slack_proxy = _agent_slack.credential_proxy | default({}) %}
+{%       set _ = _slack_bot_handles.append(_agent_slack_proxy.bot_handle | default(_agent_slack.bot_handle | default('xoxb-locksmith-' ~ agent.id))) %}
+{%       set _ = _slack_app_handles.append(_agent_slack_proxy.app_handle | default(_agent_slack.app_handle | default('xapp-locksmith-' ~ agent.id))) %}
+{%       if _slack_native.include_user | default(false) or _agent_slack.user_token | default('') != '' or _agent_slack.user_handle | default('') != '' or _agent_slack_proxy.user_handle | default('') != '' %}
+{%         set _ = _slack_user_handles.append(_agent_slack_proxy.user_handle | default(_agent_slack.user_handle | default('xoxp-locksmith-' ~ agent.id))) %}
+{%       endif %}
+{%     endif %}
+{%   endfor %}
+{% endif %}
+{% if _slack_native_enabled and _slack_bot_handles | length > 0 %}
+  - name: "{{ _slack_native.bot_tool_name | default('slack-bot') }}"
+    description: "Slack bot Web API credential transport"
+    upstream: "{{ _slack_native.upstream | default('https://slack.com/api') }}"
+    egress: "proxied"
+    credential_handles:
+{%   for handle in _slack_bot_handles | unique %}
+      - "{{ handle }}"
+{%   endfor %}
+    auth:
+      header: "Authorization"
+      force_replace: true
+      value:
+        from_env:
+          var: "{{ _slack_native.bot_token_env | default('SLACK_BOT_TOKEN') }}"
+          prefix: "Bearer "
+    timeouts:
+      request_seconds: {{ _slack_native.request_seconds | default(locksmith.timeout_seconds | default(60)) }}
+      idle_seconds: {{ _slack_native.idle_seconds | default(locksmith.idle_timeout_seconds | default(60)) }}
+    body_limit_bytes: {{ _slack_native.body_limit_bytes | default(locksmith.body_limit_bytes | default(10485760)) }}
+{% endif %}
+{% if _slack_native_enabled and _slack_app_handles | length > 0 %}
+  - name: "{{ _slack_native.app_tool_name | default('slack-app') }}"
+    description: "Slack app-token Web API credential transport"
+    upstream: "{{ _slack_native.upstream | default('https://slack.com/api') }}"
+    egress: "proxied"
+    credential_handles:
+{%   for handle in _slack_app_handles | unique %}
+      - "{{ handle }}"
+{%   endfor %}
+    auth:
+      header: "Authorization"
+      force_replace: true
+      value:
+        from_env:
+          var: "{{ _slack_native.app_token_env | default('SLACK_APP_TOKEN') }}"
+          prefix: "Bearer "
+    timeouts:
+      request_seconds: {{ _slack_native.request_seconds | default(locksmith.timeout_seconds | default(60)) }}
+      idle_seconds: {{ _slack_native.idle_seconds | default(locksmith.idle_timeout_seconds | default(60)) }}
+    body_limit_bytes: {{ _slack_native.body_limit_bytes | default(locksmith.body_limit_bytes | default(10485760)) }}
+{% endif %}
+{% if _slack_native_enabled and _slack_user_handles | length > 0 %}
+  - name: "{{ _slack_native.user_tool_name | default('slack-user') }}"
+    description: "Slack user-token Web API credential transport"
+    upstream: "{{ _slack_native.upstream | default('https://slack.com/api') }}"
+    egress: "proxied"
+    credential_handles:
+{%   for handle in _slack_user_handles | unique %}
+      - "{{ handle }}"
+{%   endfor %}
+    auth:
+      header: "Authorization"
+      force_replace: true
+      value:
+        from_env:
+          var: "{{ _slack_native.user_token_env | default('SLACK_USER_TOKEN') }}"
+          prefix: "Bearer "
+    timeouts:
+      request_seconds: {{ _slack_native.request_seconds | default(locksmith.timeout_seconds | default(60)) }}
+      idle_seconds: {{ _slack_native.idle_seconds | default(locksmith.idle_timeout_seconds | default(60)) }}
+    body_limit_bytes: {{ _slack_native.body_limit_bytes | default(locksmith.body_limit_bytes | default(10485760)) }}
+{% endif %}
 {% for tool in locksmith.tools %}
-{%   if tool.api_key | default('') != '' or tool.auth_required | default(true) == false %}
+{%   if tool.api_key | default('') != '' or tool.api_key_from_env | default(false) or tool.auth_required | default(true) == false %}
 {%     set _tool_egress = tool.egress | default((tool.cloud | default(true)) | ternary('proxied', 'direct')) %}
   - name: "{{ tool.name }}"
     description: "{{ tool.description | default(tool.name) }}"
     upstream: "{{ tool.upstream }}"
     egress: "{{ _tool_egress }}"
-{% if tool.api_key | default('') != '' %}
+{% if tool.credential_handles is defined and tool.credential_handles | length > 0 %}
+    credential_handles: {{ tool.credential_handles | to_json }}
+{% endif %}
+{% if tool.api_key | default('') != '' or tool.api_key_from_env | default(false) %}
     auth:
       header: "{{ tool.api_key_header | default('Authorization') }}"
       force_replace: {{ tool.force_replace | default(false) | to_json }}

@@ -334,13 +334,15 @@ write_vault() {
 
   local -a entries=()
 
-  if ! ${SKIP_SLACK} && [[ -n "${SLACK_BOT_TOKEN}" ]]; then
-    entries+=("vault_${AGENT_ID}_slack_bot_token=${SLACK_BOT_TOKEN}")
-    entries+=("vault_${AGENT_ID}_slack_app_token=${SLACK_APP_TOKEN}")
-  fi
-
   if ! ${SKIP_TELEGRAM} && [[ -n "${TELEGRAM_BOT_TOKEN}" ]]; then
     entries+=("vault_${AGENT_ID}_telegram_bot_token=${TELEGRAM_BOT_TOKEN}")
+  fi
+
+  if ! ${SKIP_SLACK} && [[ -n "${SLACK_BOT_TOKEN}" ]]; then
+    info "Add Slack credentials to the root-readable Locksmith env file instead of the per-agent vault:"
+    printf "  ${BOLD}SLACK_BOT_TOKEN${NC}=\"%s\"\n" "${SLACK_BOT_TOKEN}"
+    printf "  ${BOLD}SLACK_APP_TOKEN${NC}=\"%s\"\n" "${SLACK_APP_TOKEN}"
+    echo ""
   fi
 
   if [[ ${#entries[@]} -eq 0 ]]; then
@@ -362,9 +364,7 @@ write_agent_config() {
 
     if ! ${SKIP_SLACK} && [[ -n "${SLACK_BOT_TOKEN}" ]]; then
       needs_patch=true
-      patch_lines+=$'\n'"    slack:"
-      patch_lines+=$'\n'"      bot_token: \"{{ vault_${AGENT_ID}_slack_bot_token }}\""
-      patch_lines+=$'\n'"      app_token: \"{{ vault_${AGENT_ID}_slack_app_token }}\""
+      patch_lines+=$'\n'"    slack: {}"
     fi
 
     if ! ${SKIP_TELEGRAM} && [[ -n "${TELEGRAM_BOT_TOKEN}" ]]; then
@@ -438,9 +438,7 @@ write_agent_config() {
   fi
 
   if ! ${SKIP_SLACK} && [[ -n "${SLACK_BOT_TOKEN}" || ${DRY_RUN} == true ]]; then
-    yaml_block+=$'\n'"    slack:"
-    yaml_block+=$'\n'"      bot_token: \"{{ vault_${AGENT_ID}_slack_bot_token }}\""
-    yaml_block+=$'\n'"      app_token: \"{{ vault_${AGENT_ID}_slack_app_token }}\""
+    yaml_block+=$'\n'"    slack: {}"
   fi
 
   if ! ${SKIP_TELEGRAM} && [[ -n "${TELEGRAM_BOT_TOKEN}" || ${DRY_RUN} == true ]]; then
@@ -521,7 +519,7 @@ print_summary() {
 
   if ! ${SKIP_SLACK}; then
     if [[ -n "${SLACK_BOT_TOKEN}" ]]; then
-      ok "Slack: configured (vault_${AGENT_ID}_slack_bot_token)"
+      ok "Slack: configured via Locksmith native credential transport"
     else
       warn "Slack: skipped"
     fi

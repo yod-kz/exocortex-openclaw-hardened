@@ -42,7 +42,8 @@ openclaw_channels: {}
 _agent_slack_defaults:
   mode: "socket"
   group_policy: "allowlist"
-  streaming: "partial"
+  streaming:
+    mode: "partial"
 
 _agent_telegram_defaults:
   dm_policy: "pairing"

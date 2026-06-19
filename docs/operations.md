@@ -48,22 +48,25 @@ The script will:
        memory_search: true
        state_repo: "git@github.com:your-org/my-agents.git"
        state_path: "agents/bob"
-       slack:
-         bot_token: "{{ vault_bob_slack_bot_token }}"
-         app_token: "{{ vault_bob_slack_app_token }}"
+       slack: {}
        telegram:
          bot_token: "{{ vault_bob_telegram_bot_token }}"
    ```
 
-3. **Add tokens to vault:**
+3. **Add tokens:**
    ```bash
    ansible-vault edit inventory/group_vars/agent_hosts/vault.yml
    ```
    Add:
    ```yaml
-   vault_bob_slack_bot_token: "xoxb-..."
-   vault_bob_slack_app_token: "xapp-..."
    vault_bob_telegram_bot_token: "..."
+   ```
+   Native Slack uses Locksmith credential transport by default. Put the shared
+   Slack credentials in the root-readable Locksmith env file configured by
+   `locksmith.env_files`:
+   ```bash
+   SLACK_BOT_TOKEN=xoxb-...
+   SLACK_APP_TOKEN=xapp-...
    ```
 
 4. **Deploy:**

@@ -7,6 +7,9 @@ Wants=network-online.target
 Type=simple
 ExecStart={{ locksmith.daemon_binary_path | default(locksmith.binary_path | default('/usr/local/bin/locksmithd')) }} --config /etc/locksmith/config.yaml
 EnvironmentFile=/etc/locksmith/locksmith.env
+{% for env_file in locksmith.env_files | default([]) %}
+EnvironmentFile=-{{ env_file }}
+{% endfor %}
 Restart=always
 RestartSec=5
 

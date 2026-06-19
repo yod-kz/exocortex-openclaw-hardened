@@ -133,9 +133,18 @@ Credential-injecting reverse proxy for tool APIs.
 | `locksmith.log_level` | string | `info` | Log level |
 | `locksmith.inbound_token` | string | `""` | Bearer token agents must present (vault reference) |
 | `locksmith.oauth_sealing_key` | string | `""` | Optional base64 32-byte OAuth sealing key rendered as `LOCKSMITH_OAUTH_SEALING_KEY` |
+| `locksmith.env_files` | list | `[]` | Optional root-readable environment files sourced by `locksmith.service` after `/etc/locksmith/locksmith.env` |
 | `locksmith.required` | bool | `true` | Render OpenClaw's Locksmith plugin in required mode |
 | `locksmith.generic_tool` | bool | `false` | Expose the generic `locksmith_call` tool when true; hardened deployments should keep this false |
 | `locksmith.openclaw_base_url` | string | derived from listen host/port | URL rendered into OpenClaw plugin config |
+| `locksmith.slack_native.enabled` | bool | `true` | Enable generated Locksmith credential transport tools for OpenClaw native Slack accounts |
+| `locksmith.slack_native.bot_token_env` | string | `SLACK_BOT_TOKEN` | Env var containing the real xoxb bot token for `/transport/slack-bot` |
+| `locksmith.slack_native.app_token_env` | string | `SLACK_APP_TOKEN` | Env var containing the real xapp Socket Mode token for `/transport/slack-app` |
+| `locksmith.slack_native.user_token_env` | string | `SLACK_USER_TOKEN` | Env var containing an optional real xoxp user token for `/transport/slack-user` |
+| `locksmith.slack_native.bot_token` | string | `""` | Optional vault-managed xoxb token rendered only into Locksmith's env file |
+| `locksmith.slack_native.app_token` | string | `""` | Optional vault-managed xapp Socket Mode token rendered only into Locksmith's env file |
+| `locksmith.slack_native.user_token` | string | `""` | Optional vault-managed xoxp token rendered only into Locksmith's env file |
+| `locksmith.slack_native.include_user` | bool | `false` | Also generate fake xoxp handles for native Slack accounts |
 | `locksmith.kamiwaza.enabled` | bool | `false` | Enable Locksmith's Kamiwaza MCP provider |
 | `locksmith.kamiwaza.api_url` | string | `""` | Kamiwaza platform API base, for example `https://localhost/api`; if empty, Locksmith tries Kamiwaza env vars and built-in local candidates |
 | `locksmith.kamiwaza.api_token` | string | `""` | Kamiwaza PAT or service token; rendered only into Locksmith's root-owned environment |
@@ -158,7 +167,9 @@ Credential-injecting reverse proxy for tool APIs.
 | `api_key_prefix` | string | yes | Prefix before key value (empty string for none) |
 | `auth_required` | bool | no | Set false only for intentionally unauthenticated tools; defaults to true |
 | `api_key_env` | string | no | Environment variable name exposed to containers |
+| `api_key_from_env` | bool | no | Render the credential env reference even when `api_key` is supplied by an external env file |
 | `force_replace` | bool | no | When true, Locksmith strips any caller-supplied auth header and fails closed if the replacement credential is unavailable |
+| `credential_handles` | list | no | Fake bearer handles accepted by Locksmith `/transport/<tool>/...` routes for SDK credential transport |
 | `timeouts.request_seconds` | int | no | Total request timeout |
 | `timeouts.idle_seconds` | int | no | Per-read idle timeout for streaming responses |
 | `body_limit_bytes` | int | no | Maximum request body size Locksmith accepts for the tool |
@@ -453,11 +464,16 @@ presence and are only reachable via the gateway UI.
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `slack.bot_token` | string | *(required)* | Slack bot token (xoxb-...) |
-| `slack.app_token` | string | `""` | Slack app-level token for Socket Mode (xapp-...) |
+| `slack.bot_token` | string | `""` | Raw Slack bot token. Required only when `locksmith.slack_native.enabled=false`; ignored by the default fake-token transport path. |
+| `slack.app_token` | string | `""` | Raw Slack app-level Socket Mode token. Required only when `locksmith.slack_native.enabled=false` and `slack.mode=socket`. |
+| `slack.user_token` | string | `""` | Optional raw Slack user token. With native transport enabled, its presence requests a fake xoxp handle instead of rendering the raw token. |
+| `slack.bot_handle` | string | `xoxb-locksmith-<agent>` | Optional fake bot-token handle rendered into OpenClaw when native Slack transport is enabled |
+| `slack.app_handle` | string | `xapp-locksmith-<agent>` | Optional fake app-token handle rendered into OpenClaw when native Slack transport is enabled |
+| `slack.user_handle` | string | `xoxp-locksmith-<agent>` | Optional fake user-token handle rendered into OpenClaw when native Slack transport is enabled |
+| `slack.credential_proxy.enabled` | bool | `locksmith.slack_native.enabled` | Disable to render raw `slack.bot_token`/`slack.app_token` into OpenClaw intentionally |
 | `slack.mode` | string | `socket` | Connection mode: `socket` or `http` |
 | `slack.group_policy` | string | `allowlist` | Channel access policy (`allowlist` or `open`) |
-| `slack.streaming` | string | `partial` | Stream preview mode |
+| `slack.streaming` | object/string | `{mode: partial}` | Stream preview mode. Object form is canonical; legacy scalar values are normalized by the template. |
 
 ### Agent Telegram identity (`openclaw_agents[].telegram`)
 
@@ -523,11 +539,11 @@ All secrets are stored in `group_vars/agent_hosts/vault.yml` (encrypted with
 
 | Variable | Used by |
 |----------|---------|
-| `vault_<agentid>_slack_bot_token` | `openclaw_agents[].slack.bot_token` |
-| `vault_<agentid>_slack_app_token` | `openclaw_agents[].slack.app_token` |
 | `vault_<agentid>_telegram_bot_token` | `openclaw_agents[].telegram.bot_token` |
 | `vault_telegram_bot_token` | *(deprecated)* Legacy `openclaw_channels.telegram.botToken` |
-| `vault_slack_bot_token` | Legacy `openclaw_channels.slack.botToken`; also usable for `locksmith.tools[].api_key` (Slack Web API) |
+| `vault_slack_bot_token` / `SLACK_BOT_TOKEN` | Real Slack xoxb token for `locksmith.slack_native` |
+| `vault_slack_app_token` / `SLACK_APP_TOKEN` | Real Slack xapp Socket Mode token for `locksmith.slack_native` |
+| `vault_slack_user_token` / `SLACK_USER_TOKEN` | Optional real Slack xoxp token for `locksmith.slack_native.include_user` |
 | `vault_anthropic_api_key` | `inference.endpoints[].api_key` (Anthropic) |
 | `vault_openai_api_key` | `inference.endpoints[].api_key` (OpenAI) |
 | `vault_tokenator_pat` | `inference.endpoints[].api_key` (Kamiwaza tokenator) |

@@ -5,6 +5,15 @@
 {%     set _ = _eps.append(ep) %}
 {%   endif %}
 {% endfor %}
+{% set _locksmith_base_url = locksmith.openclaw_base_url | default('') %}
+{% if _locksmith_base_url == '' %}
+{%   set _locksmith_base_url = 'http://' ~ (locksmith.listen_host | default('127.0.0.1')) ~ ':' ~ (locksmith.listen_port | default(9200)) %}
+{% endif %}
+{% set _slack_native = locksmith.slack_native | default({}) %}
+{% set _slack_credential_transport_enabled = (locksmith.enabled | default(true)) and (_slack_native.enabled | default(true)) %}
+{% set _slack_bot_tool_name = _slack_native.bot_tool_name | default('slack-bot') %}
+{% set _slack_app_tool_name = _slack_native.app_tool_name | default('slack-app') %}
+{% set _slack_user_tool_name = _slack_native.user_tool_name | default('slack-user') %}
 {# ── Agent-scoped channel accounts ───────────────────────────────── #}
 {# Collect agents that define their own Slack or Telegram identity.   #}
 {# Each entry: {agent: <agent dict>, slack: <merged>, telegram: <merged>} #}
@@ -12,7 +21,7 @@
 {% set _agent_telegram = [] %}
 {% set _agent_discord = [] %}
 {% for agent in openclaw_agents | default([]) %}
-{%   if agent.slack is defined and agent.slack.bot_token | default('') != '' %}
+{%   if agent.slack is defined and (agent.slack.bot_token | default('') != '' or _slack_credential_transport_enabled) %}
 {%     set _slack = _agent_slack_defaults | default({}) | combine(agent.slack, recursive=True) %}
 {%     set _ = _agent_slack.append({'agent': agent, 'slack': _slack}) %}
 {%   endif %}
@@ -38,7 +47,7 @@
 {% set _locksmith_projected_tool_names = [] %}
 {% if locksmith.enabled | default(true) %}
 {%   for tool in locksmith.tools | default([]) %}
-{%     if tool.projected | default(true) and (tool.api_key | default('') != '' or tool.auth_required | default(true) == false) %}
+{%     if tool.projected | default(true) and (tool.api_key | default('') != '' or tool.api_key_from_env | default(false) or tool.auth_required | default(true) == false) %}
 {%       set _ = _locksmith_projected_tool_names.append(tool.name) %}
 {%     endif %}
 {%   endfor %}
@@ -209,14 +218,46 @@
 {%   set _slack_default = _agent_slack | selectattr('agent.default', 'defined') | selectattr('agent.default', 'equalto', true) | first | default(_agent_slack[0]) %}
 {%   set _slack_accounts = {} %}
 {%   for entry in _agent_slack %}
+{%     set _entry_slack_proxy = entry.slack.credential_proxy | default({}) %}
+{%     set _entry_slack_proxy_enabled = _entry_slack_proxy.enabled | default(_slack_credential_transport_enabled) %}
+{%     if _entry_slack_proxy_enabled %}
+{%       set _slack_bot_token = _entry_slack_proxy.bot_handle | default(entry.slack.bot_handle | default('xoxb-locksmith-' ~ entry.agent.id)) %}
+{%       set _slack_app_token = _entry_slack_proxy.app_handle | default(entry.slack.app_handle | default('xapp-locksmith-' ~ entry.agent.id)) %}
+{%       set _slack_user_token = _entry_slack_proxy.user_handle | default(entry.slack.user_handle | default('')) %}
+{%       if _slack_user_token == '' and (_slack_native.include_user | default(false) or entry.slack.user_token | default('') != '') %}
+{%         set _slack_user_token = 'xoxp-locksmith-' ~ entry.agent.id %}
+{%       endif %}
+{%     else %}
+{%       set _slack_bot_token = entry.slack.bot_token %}
+{%       set _slack_app_token = entry.slack.app_token | default('') %}
+{%       set _slack_user_token = entry.slack.user_token | default('') %}
+{%     endif %}
+{%     set _slack_streaming = entry.slack.streaming | default({'mode': 'partial'}) %}
+{%     if _slack_streaming is string %}
+{%       set _slack_streaming = {'mode': _slack_streaming} %}
+{%     endif %}
 {%     set _slack_acct = {
          'name': entry.agent.name | default(entry.agent.id),
          'mode': entry.slack.mode | default('socket'),
-         'botToken': entry.slack.bot_token,
-         'appToken': entry.slack.app_token | default(''),
+         'botToken': _slack_bot_token,
+         'appToken': _slack_app_token,
          'groupPolicy': entry.slack.group_policy | default('allowlist'),
-         'streaming': entry.slack.streaming | default('partial')
+         'streaming': _slack_streaming
        } %}
+{%     if _slack_user_token | default('') != '' %}
+{%       set _ = _slack_acct.update({'userToken': _slack_user_token}) %}
+{%     endif %}
+{%     if _entry_slack_proxy_enabled %}
+{%       set _slack_credential_proxy = {
+           'enabled': true,
+           'botApiUrl': _locksmith_base_url ~ '/transport/' ~ _slack_bot_tool_name ~ '/',
+           'appApiUrl': _locksmith_base_url ~ '/transport/' ~ _slack_app_tool_name ~ '/'
+         } %}
+{%       if _slack_user_token | default('') != '' %}
+{%         set _ = _slack_credential_proxy.update({'userApiUrl': _locksmith_base_url ~ '/transport/' ~ _slack_user_tool_name ~ '/'}) %}
+{%       endif %}
+{%       set _ = _slack_acct.update({'credentialProxy': _slack_credential_proxy}) %}
+{%     endif %}
 {%     set _ = _slack_accounts.update({entry.agent.id: _slack_acct}) %}
 {%   endfor %}
 {%   set _ = _channels_out.update({'slack': {'defaultAccount': _slack_default.agent.id, 'accounts': _slack_accounts}}) %}
@@ -342,7 +383,7 @@
 {% if locksmith.enabled | default(true) %}
 {%   set _locksmith_projected_tools = {} %}
 {%   for tool in locksmith.tools | default([]) %}
-{%     if tool.projected | default(true) and (tool.api_key | default('') != '' or tool.auth_required | default(true) == false) %}
+{%     if tool.projected | default(true) and (tool.api_key | default('') != '' or tool.api_key_from_env | default(false) or tool.auth_required | default(true) == false) %}
 {%       set _tool_config = {'enabled': true, 'description': tool.description | default(tool.name)} %}
 {%       if tool.label is defined %}
 {%         set _ = _tool_config.update({'label': tool.label}) %}

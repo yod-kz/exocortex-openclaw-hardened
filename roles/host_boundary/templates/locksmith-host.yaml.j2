@@ -67,13 +67,16 @@ shutdown:
 tools:
 {% set _locksmith_tools = host_boundary_effective.locksmith.tools | default(_global_locksmith.tools | default([])) %}
 {% for tool in _locksmith_tools %}
-{%   if tool.api_key | default('') != '' or tool.auth_required | default(true) == false %}
+{%   if tool.api_key | default('') != '' or tool.api_key_from_env | default(false) or tool.auth_required | default(true) == false %}
 {%     set _tool_egress = tool.egress | default((tool.cloud | default(true)) | ternary('proxied', 'direct')) %}
   - name: "{{ tool.name }}"
     description: "{{ tool.description | default(tool.name) }}"
     upstream: "{{ tool.upstream }}"
     egress: "{{ _tool_egress }}"
-{% if tool.api_key | default('') != '' %}
+{% if tool.credential_handles is defined and tool.credential_handles | length > 0 %}
+    credential_handles: {{ tool.credential_handles | to_json }}
+{% endif %}
+{% if tool.api_key | default('') != '' or tool.api_key_from_env | default(false) %}
     auth:
       header: "{{ tool.api_key_header | default('Authorization') }}"
       force_replace: {{ tool.force_replace | default(false) | to_json }}

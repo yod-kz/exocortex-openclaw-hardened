@@ -315,6 +315,13 @@ telemetry:
 ```yaml
 locksmith:
   enabled: true
+  env_files:
+    - "/home/openclaw/.config/locksmith/locksmith.env"
+  slack_native:
+    enabled: true
+    bot_token_env: "SLACK_BOT_TOKEN"
+    app_token_env: "SLACK_APP_TOKEN"
+    user_token_env: "SLACK_USER_TOKEN"
   tools:
     - name: "github"
       description: "GitHub REST API"
@@ -328,26 +335,41 @@ locksmith:
       timeouts:
         request_seconds: 30
         idle_seconds: 60
-
-    - name: "slack"
-      description: "Slack Web API"
-      upstream: "https://slack.com/api"
-      egress: "proxied"
-      api_key: "{{ vault_slack_bot_token }}"
-      api_key_header: "Authorization"
-      api_key_prefix: "Bearer"
-      api_key_env: "SLACK_BOT_TOKEN"
-      force_replace: true
-      timeouts:
-        request_seconds: 60
-        idle_seconds: 60
 ```
 
-When Slack is configured only as a Locksmith Web API tool, OpenClaw exposes it
-to agents as `locksmith_slack`. This does not configure the native Slack channel
-runtime or put the Slack token inside the OpenClaw container. `force_replace:
-true` means placeholder auth headers are stripped and replaced by Locksmith, and
-missing Locksmith-side credentials fail closed instead of reaching Slack/GitHub.
+For native Slack ingress, define a tokenless per-agent Slack block:
+
+```yaml
+openclaw_agents:
+  - id: "mira"
+    default: true
+    slack: {}
+```
+
+The installer renders fake Slack-shaped handles into OpenClaw, for example
+`xoxb-locksmith-mira` and `xapp-locksmith-mira`, plus `credentialProxy` URLs
+pointing at local Locksmith `/transport/slack-*` endpoints. The real Slack bot
+token and app token stay in Locksmith's host environment. `SLACK_APP_TOKEN` is
+the Slack `xapp-...` Socket Mode token used for `apps.connections.open`.
+
+If `locksmith.env_files` is set, systemd sources those root-readable files after
+the generated `/etc/locksmith/locksmith.env`. A minimal operator-managed file is:
+
+```bash
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_APP_TOKEN=xapp-...
+```
+
+The generated transport tools use `force_replace: true`, so caller-supplied Slack
+authorization headers are stripped and missing Locksmith-side credentials fail
+closed before reaching Slack. Optional user-token workflows can set
+`SLACK_USER_TOKEN` and `locksmith.slack_native.include_user: true`; OpenClaw then
+receives a fake `xoxp-locksmith-<agent>` handle and Locksmith injects the real
+user token only on egress.
+
+You can still add a generic Slack entry under `locksmith.tools` if you want an
+agent-facing `locksmith_slack` REST proxy. That is separate from the native Slack
+channel runtime and is not required for Socket Mode.
 
 For user-token Slack tool workflows, enable the contextual Slack MCP alongside
 an ingress channel. It runs outside OpenClaw, reads the xoxp token from the host

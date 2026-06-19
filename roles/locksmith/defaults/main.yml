@@ -21,6 +21,7 @@ _locksmith_defaults:
   log_level: "info"
   inbound_token: ""
   oauth_sealing_key: ""
+  env_files: []
   required: true
   generic_tool: false
   catalog_ttl_seconds: 30
@@ -49,4 +50,20 @@ _locksmith_defaults:
     egress: "direct"
     timeout_seconds: 30
     projected_tools: []
+  slack_native:
+    enabled: true
+    upstream: "https://slack.com/api"
+    bot_tool_name: "slack-bot"
+    app_tool_name: "slack-app"
+    user_tool_name: "slack-user"
+    bot_token: ""
+    app_token: ""
+    user_token: ""
+    bot_token_env: "SLACK_BOT_TOKEN"
+    app_token_env: "SLACK_APP_TOKEN"
+    user_token_env: "SLACK_USER_TOKEN"
+    include_user: false
+    request_seconds: 60
+    idle_seconds: 60
+    body_limit_bytes: 10485760
   tools: []

@@ -99,9 +99,9 @@ convention:
 
 | Pattern | Example |
 |---------|---------|
-| `vault_<agentid>_slack_bot_token` | `vault_alice_slack_bot_token` |
-| `vault_<agentid>_slack_app_token` | `vault_alice_slack_app_token` |
 | `vault_<agentid>_telegram_bot_token` | `vault_alice_telegram_bot_token` |
+| `vault_slack_bot_token` or `SLACK_BOT_TOKEN` | Slack xoxb token for Locksmith native Slack transport |
+| `vault_slack_app_token` or `SLACK_APP_TOKEN` | Slack xapp Socket Mode token for Locksmith native Slack transport |
 | `vault_openclaw_gateway_token` | Gateway bearer token |
 | `vault_openclaw_gateway_password` | Gateway password |
 | `vault_<provider>_api_key` | `vault_anthropic_api_key` |

@@ -55,6 +55,15 @@
           set_fact:
             slack_token: "{{ slack_prompt.user_input | default('', true) }}"
 
+        - name: Prompt for Slack app token
+          pause:
+            prompt: "Enter Slack app-level Socket Mode token (xapp-..., or press Enter to skip)"
+          register: slack_app_prompt
+
+        - name: Set Slack app token
+          set_fact:
+            slack_app_token: "{{ slack_app_prompt.user_input | default('', true) }}"
+
         - name: Prompt for Anthropic API key
           pause:
             prompt: "Enter Anthropic API key (sk-ant-..., or press Enter to skip)"
@@ -111,6 +120,7 @@
               ---
               vault_telegram_bot_token: "{{ telegram_token }}"
               vault_slack_bot_token: "{{ slack_token }}"
+              vault_slack_app_token: "{{ slack_app_token }}"
               vault_anthropic_api_key: "{{ anthropic_key }}"
               vault_openai_api_key: "{{ openai_key }}"
               vault_github_token: "{{ github_token }}"

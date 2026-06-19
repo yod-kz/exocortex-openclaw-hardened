@@ -249,6 +249,28 @@ locksmith:
   log_level: "info"
   inbound_token: "{{ vault_locksmith_inbound_token | default('') }}"
   oauth_sealing_key: "{{ vault_locksmith_oauth_sealing_key | default('') }}"
+  # Optional root-readable host env files. These are sourced after the
+  # generated /etc/locksmith/locksmith.env, so Slack tokens can be managed
+  # outside Ansible vault while still staying out of OpenClaw.
+  env_files:
+    - "/home/openclaw/.config/locksmith/locksmith.env"
+
+  # Native Slack channel credential transport. OpenClaw receives fake Slack-
+  # shaped handles such as xoxb-locksmith-mira and xapp-locksmith-mira.
+  # Locksmith accepts those handles only on /transport/slack-* and injects the
+  # real token from SLACK_BOT_TOKEN / SLACK_APP_TOKEN on egress through Pipelock.
+  slack_native:
+    enabled: true
+    bot_token_env: "SLACK_BOT_TOKEN"
+    app_token_env: "SLACK_APP_TOKEN"
+    user_token_env: "SLACK_USER_TOKEN"
+    # Either place these values in env_files above or manage them by vault here.
+    # They are rendered only into Locksmith's env file, never into openclaw.json.
+    # SLACK_APP_TOKEN is the xapp Socket Mode token.
+    bot_token: "{{ vault_slack_bot_token | default('') }}"
+    app_token: "{{ vault_slack_app_token | default('') }}"
+    user_token: "{{ vault_slack_user_token | default('') }}"
+    include_user: false
 
   kamiwaza:
     enabled: false
@@ -288,20 +310,6 @@ locksmith:
       force_replace: true
       timeouts:
         request_seconds: 30
-        idle_seconds: 60
-      body_limit_bytes: 10485760
-
-    - name: "slack"
-      description: "Slack Web API"
-      upstream: "https://slack.com/api"
-      egress: "proxied"
-      api_key: "{{ vault_slack_bot_token | default('') }}"
-      api_key_header: "Authorization"
-      api_key_prefix: "Bearer"
-      api_key_env: "SLACK_BOT_TOKEN"
-      force_replace: true
-      timeouts:
-        request_seconds: 60
         idle_seconds: 60
       body_limit_bytes: 10485760
 
@@ -421,13 +429,15 @@ openclaw_agents:
     memory_search: true
     state_repo: "https://github.com/your-org/your-agents.git"
     state_path: "agents/mira"
+    # Tokenless by default. With locksmith.slack_native.enabled, OpenClaw gets
+    # fake handles and local credentialProxy URLs; real xoxb/xapp values stay
+    # in Locksmith's env.
     slack:
-      bot_token: "{{ vault_mira_slack_bot_token }}"
-      app_token: "{{ vault_mira_slack_app_token }}"
       # Optional overrides (defaults shown):
       # mode: "socket"
       # group_policy: "allowlist"
-      # streaming: "partial"
+      # streaming:
+      #   mode: "partial"
     telegram:
       bot_token: "{{ vault_mira_telegram_bot_token }}"
       # Optional overrides (defaults shown):
@@ -439,9 +449,7 @@ openclaw_agents:
   # - id: "atlas"
   #   name: "Atlas"
   #   workspace_subdir: "atlas"
-  #   slack:
-  #     bot_token: "{{ vault_atlas_slack_bot_token }}"
-  #     app_token: "{{ vault_atlas_slack_app_token }}"
+  #   slack: {}
 
   # Agents without slack/telegram blocks have no channel identity
   # and are only reachable via the gateway UI agent selector.
