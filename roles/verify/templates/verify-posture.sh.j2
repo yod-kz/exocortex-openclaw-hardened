@@ -128,6 +128,7 @@ check "memory: QMD backend rendered"      "grep -q '\"backend\": \"qmd\"' /home/
 {% endif %}
 {% if openclaw_memory.active_memory.enabled | default(false) %}
 check "memory: active-memory rendered"    "grep -q '\"active-memory\"' /home/openclaw/.openclaw/openclaw.json"
+check "memory: associative recall rendered" "grep -q '\"associativeRecall\"' /home/openclaw/.openclaw/openclaw.json"
 {% endif %}
 {% if openclaw_memory.dreaming.enabled | default(false) %}
 check "memory: memory-core rendered"      "grep -q '\"memory-core\"' /home/openclaw/.openclaw/openclaw.json"
@@ -137,8 +138,23 @@ check "memory: warm promotion target"     "grep -q '\"promotionTargetPath\": \"m
 {% set agent_memory_enabled = (agent.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) %}
 {% if agent_memory_enabled %}
 check "memory: {{ agent.id }} no legacy queue"       "test ! -e /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/.memory-queue && test ! -e /home/openclaw/.openclaw/agents/{{ agent.id }}/.memory-queue"
+{% if openclaw_memory.scaffold.create_bootstrap_files | default(true) %}
+check "memory: {{ agent.id }} bootstrap files exist" "for f in AGENTS.md SOUL.md IDENTITY.md USER.md TOOLS.md HEARTBEAT.md; do test -f /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/\$f || exit 1; done"
+{% endif %}
 check "memory: {{ agent.id }} hot MEMORY.md exists"  "test -f /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/MEMORY.md"
+{% if openclaw_memory.scaffold.create_tier2_files | default(true) %}
+check "memory: {{ agent.id }} tier2 files exist"     "for f in tier2-matt-personal.md tier2-projects.md tier2-research.md tier2-insights.md tier2-moltbook.md; do test -f /home/openclaw/.openclaw/agents/{{ agent.id }}/memory/\$f || exit 1; done"
+{% endif %}
 check "memory: {{ agent.id }} promoted.md exists"    "test -f /home/openclaw/.openclaw/agents/{{ agent.id }}/memory/promoted.md"
+{% if openclaw_memory.scaffold.create_daily_log | default(true) %}
+check "memory: {{ agent.id }} today's log exists"    "test -f /home/openclaw/.openclaw/agents/{{ agent.id }}/memory/\$(date +%F).md"
+{% endif %}
+{% if openclaw_memory.scaffold.create_recall_tool | default(true) %}
+check "memory: {{ agent.id }} recall helper exists"  "test -x /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/tools/aineko-recall.sh"
+{% endif %}
+{% if openclaw_memory.scaffold.create_flush_tool | default(true) %}
+check "memory: {{ agent.id }} flush helper exists"   "test -x /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/tools/aineko-flush.sh"
+{% endif %}
 check "memory: {{ agent.id }} hot memory marker-free" "! grep -q 'openclaw-memory-promotion:' /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/MEMORY.md 2>/dev/null"
 {% endif %}
 {% endfor %}

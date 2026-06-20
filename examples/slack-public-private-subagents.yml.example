@@ -50,6 +50,14 @@ openclaw_memory:
     max_summary_chars: 220
     persist_transcripts: false
     logging: true
+    associative_recall:
+      enabled: true
+      # Aineko-style unbidden recall. Keep this private-agent only.
+      intrusion_rate: 0.15
+      max_snippets: 1
+      max_snippet_chars: 240
+      min_signal_count: 1
+      max_age_days: 90
   dreaming:
     enabled: true
     frequency: "0 3 * * *"
@@ -63,6 +71,10 @@ openclaw_memory:
       min_unique_queries: 3
   scaffold:
     enabled: true
+    create_bootstrap_files: true
+    create_tier2_files: true
+    create_recall_tool: true
+    create_flush_tool: true
     sidecar_queue_policy: "fail"
 
 openclaw_agents:

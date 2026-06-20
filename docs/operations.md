@@ -137,8 +137,15 @@ For private memory with public Slack isolation, use the example's
 `openclaw_memory` block:
 
 - enable QMD, active-memory, and dreaming only for the private agent
+- enable `active_memory.associative_recall` only for the private agent when you
+  want Aineko-style unbidden recall
 - keep public agents at `memory.enabled: false` and `memory_search: false`
 - keep automated deep promotions in `memory/promoted.md`
+- keep Tier 1 hot memory human-curated; use the scaffolded tier-2 files and
+  `tools/aineko-recall.sh` for bulky on-demand recall
+- append durable pre-compaction and heartbeat notes with
+  `tools/aineko-flush.sh`; it writes only to the canonical
+  `memory/YYYY-MM-DD.md` daily log
 - do not run the legacy `.memory-queue` sidecar beside native active-memory
 
 Before and after a dreaming enablement or soak, capture and verify the memory

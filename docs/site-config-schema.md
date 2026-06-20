@@ -419,14 +419,27 @@ emit top-level `memory.qmd`, `plugins.entries.active-memory`, and
 | `openclaw_memory.qmd.scope` | object | direct-only | OpenClaw session policy controlling where QMD results can surface |
 | `openclaw_memory.active_memory.enabled` | bool | `false` | Enable the bundled `active-memory` plugin |
 | `openclaw_memory.active_memory.agents` | list | `[]` | Agent IDs allowed to run active recall |
+| `openclaw_memory.active_memory.associative_recall.enabled` | bool | `false` | Enable native reinforced/unbidden recall injection for active-memory eligible turns |
+| `openclaw_memory.active_memory.associative_recall.intrusion_rate` | number | `0.07` | Fraction of eligible turns that sample associative recall; Aineko-style deployments commonly use `0.15` on private agents only |
+| `openclaw_memory.active_memory.associative_recall.max_snippets` | int | `1` | Maximum snippets injected on a triggered turn |
+| `openclaw_memory.active_memory.associative_recall.min_signal_count` | int | `1` | Minimum recall/daily/grounded signal count before a snippet can resurface |
+| `openclaw_memory.active_memory.associative_recall.max_age_days` | int | `90` | Exclude snippets last recalled more than this many days ago |
 | `openclaw_memory.dreaming.enabled` | bool | `false` | Enable `memory-core` dreaming sweeps |
 | `openclaw_memory.dreaming.deep.promotion_target_path` | string | `memory/promoted.md` | Warm review file for automated deep promotions |
+| `openclaw_memory.scaffold.create_bootstrap_files` | bool | `true` | Create missing `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `TOOLS.md`, and `HEARTBEAT.md` bootstrap files |
+| `openclaw_memory.scaffold.create_tier2_files` | bool | `true` | Create missing warm tier-2 memory files under `memory/` |
 | `openclaw_memory.scaffold.sidecar_queue_policy` | string | `fail` | `fail`, `warn`, or ignore legacy `.memory-queue` sidecars during state setup |
+| `openclaw_memory.scaffold.create_recall_tool` | bool | `true` | Create missing `workspace/tools/aineko-recall.sh`, an `agy`-based brute-force recall helper |
+| `openclaw_memory.scaffold.create_flush_tool` | bool | `true` | Create missing `workspace/tools/aineko-flush.sh`, an append-only canonical daily-log helper |
 
 Use `memory/promoted.md` for automated promotions and keep
-`workspace/MEMORY.md` human-curated. The `agent_state` role scaffolds
-`MEMORY.md`, `memory/promoted.md`, `memory/.dreams/`, and the daily log with
-create-if-absent semantics only.
+`workspace/MEMORY.md` human-curated. Associative recall reads memory-core's
+short-term reinforcement state through native active-memory and injects escaped
+untrusted metadata; enable it only for private memory agents. The `agent_state`
+role scaffolds bootstrap files, `MEMORY.md`, tier-2 warm files,
+`memory/promoted.md`, `memory/.dreams/`, the brute-force recall helper, the
+append-only flush helper, and the daily log with create-if-absent semantics
+only.
 
 ### openclaw_agents
 

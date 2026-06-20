@@ -74,6 +74,16 @@ _openclaw_memory_defaults: &openclaw_memory_defaults
     max_summary_chars: 220
     persist_transcripts: false
     logging: true
+    associative_recall:
+      enabled: false
+      intrusion_rate: 0.07
+      max_snippets: 1
+      max_snippet_chars: 240
+      min_signal_count: 1
+      min_score: 0
+      max_age_days: 90
+      include_promoted: false
+      recency_half_life_days: 14
     qmd:
       search_mode: "inherit"
   dreaming:
@@ -97,9 +107,13 @@ _openclaw_memory_defaults: &openclaw_memory_defaults
       max_promoted_snippet_tokens: 160
   scaffold:
     enabled: true
+    create_bootstrap_files: true
     create_memory_md: true
+    create_tier2_files: true
     create_promoted_md: true
     create_daily_log: true
+    create_recall_tool: true
+    create_flush_tool: true
     sidecar_queue_policy: "fail"
 
 openclaw_memory: *openclaw_memory_defaults

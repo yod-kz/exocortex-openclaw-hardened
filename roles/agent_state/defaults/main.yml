@@ -7,7 +7,11 @@ openclaw_memory:
   enabled: false
   scaffold:
     enabled: true
+    create_bootstrap_files: true
     create_memory_md: true
+    create_tier2_files: true
     create_promoted_md: true
     create_daily_log: true
+    create_recall_tool: true
+    create_flush_tool: true
     sidecar_queue_policy: "fail"

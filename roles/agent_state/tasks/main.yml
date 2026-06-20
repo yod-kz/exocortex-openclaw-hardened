@@ -171,13 +171,72 @@
     - _agent_memory_enabled | bool
     - (openclaw_memory.scaffold.enabled | default(true)) | bool
 
+- name: Create bootstrap memory files only if absent
+  copy:
+    dest: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.0.state_repo] }}/{{ item.0.state_path }}/workspace/{{ item.1.name }}"
+    content: "{{ item.1.content }}"
+    force: false
+    owner: openclaw
+    group: openclaw
+    mode: "0640"
+  loop: "{{ openclaw_agents | product(_aineko_bootstrap_files) | list }}"
+  loop_control:
+    label: "{{ item.0.id }}:{{ item.1.name }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.0.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+    _aineko_bootstrap_files:
+      - name: "AGENTS.md"
+        content: |
+          # Agent Operating Notes
+
+          Use memory deliberately. Before answering questions about prior work, people, dates, preferences, or decisions, search memory first when the tool is available.
+
+          Keep durable updates in the daily log using tools/aineko-flush.sh when available. Treat SOUL.md, IDENTITY.md, USER.md, TOOLS.md, HEARTBEAT.md, and MEMORY.md as read-mostly bootstrap context.
+      - name: "SOUL.md"
+        content: |
+          # Soul
+
+          Be direct, careful, and useful. Preserve continuity without inventing certainty. Keep private memory private.
+      - name: "IDENTITY.md"
+        content: |
+          # Identity
+
+          This agent is a persistent OpenClaw workspace with memory, tools, and a human-curated hot context file.
+      - name: "USER.md"
+        content: |
+          # User
+
+          Record stable user preferences and profile facts here only after they are durable and useful.
+      - name: "TOOLS.md"
+        content: |
+          # Tools
+
+          Prefer native memory_search and memory_get for recall. Keep credentials outside the workspace. Use host-managed credential transport instead of writing secrets into files.
+      - name: "HEARTBEAT.md"
+        content: |
+          # Heartbeat
+
+          On heartbeat, inspect current obligations, check memory health, and append durable updates to the canonical daily log with tools/aineko-flush.sh when needed. Do not consume or maintain a legacy .memory-queue sidecar.
+  when:
+    - item.0.state_repo is defined
+    - item.0.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+    - (openclaw_memory.scaffold.create_bootstrap_files | default(true)) | bool
+
 - name: Create hot MEMORY.md only if absent
   copy:
     dest: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/MEMORY.md"
     content: |
       # Long-Term Memory
 
-      Human-curated hot memory. Automated promotions should land in memory/promoted.md for review.
+      Human-curated hot context. Keep this file small and stable. Automated promotions should land in memory/promoted.md for review.
+
+      <!-- OPENCLAW_CACHE_BOUNDARY -->
+
+      ## Action Log
+
+      Append irreversible external actions here with timestamps. Do not compact this section automatically.
     force: false
     owner: openclaw
     group: openclaw
@@ -193,6 +252,52 @@
     - _agent_memory_enabled | bool
     - (openclaw_memory.scaffold.enabled | default(true)) | bool
     - (openclaw_memory.scaffold.create_memory_md | default(true)) | bool
+
+- name: Create tier-2 warm memory files only if absent
+  copy:
+    dest: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.0.state_repo] }}/{{ item.0.state_path }}/memory/{{ item.1.name }}"
+    content: "{{ item.1.content }}"
+    force: false
+    owner: openclaw
+    group: openclaw
+    mode: "0640"
+  loop: "{{ openclaw_agents | product(_aineko_tier2_files) | list }}"
+  loop_control:
+    label: "{{ item.0.id }}:{{ item.1.name }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.0.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+    _aineko_tier2_files:
+      - name: "tier2-matt-personal.md"
+        content: |
+          # Tier 2: Matt Personal
+
+          Warm personal context that should be searchable or loaded on demand, not injected every turn.
+      - name: "tier2-projects.md"
+        content: |
+          # Tier 2: Projects
+
+          Warm project context, decisions, open threads, and deeper implementation notes.
+      - name: "tier2-research.md"
+        content: |
+          # Tier 2: Research
+
+          Warm research notes and findings that are useful but too bulky for hot memory.
+      - name: "tier2-insights.md"
+        content: |
+          # Tier 2: Insights
+
+          Durable patterns, lessons, and operating heuristics awaiting curation.
+      - name: "tier2-moltbook.md"
+        content: |
+          # Tier 2: Moltbook
+
+          Warm moltbook and self-development notes. Keep hot memory lean; curate only stable summaries upward.
+  when:
+    - item.0.state_repo is defined
+    - item.0.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+    - (openclaw_memory.scaffold.create_tier2_files | default(true)) | bool
 
 - name: Create promoted memory review file only if absent
   copy:
@@ -238,6 +343,67 @@
     - _agent_memory_enabled | bool
     - (openclaw_memory.scaffold.enabled | default(true)) | bool
     - (openclaw_memory.scaffold.create_daily_log | default(true)) | bool
+
+- name: Ensure workspace tools directory exists
+  file:
+    path: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/tools"
+    state: directory
+    owner: openclaw
+    group: openclaw
+    mode: "0750"
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+    _create_recall_tool: "{{ openclaw_memory.scaffold.create_recall_tool | default(true) }}"
+    _create_flush_tool: "{{ openclaw_memory.scaffold.create_flush_tool | default(true) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+    - _create_recall_tool | bool or _create_flush_tool | bool
+
+- name: Create agy brute-force recall helper only if absent
+  copy:
+    src: "aineko-recall.sh"
+    dest: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/tools/aineko-recall.sh"
+    force: false
+    owner: openclaw
+    group: openclaw
+    mode: "0750"
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+    - (openclaw_memory.scaffold.create_recall_tool | default(true)) | bool
+
+- name: Create append-only memory flush helper only if absent
+  copy:
+    src: "aineko-flush.sh"
+    dest: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/tools/aineko-flush.sh"
+    force: false
+    owner: openclaw
+    group: openclaw
+    mode: "0750"
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+    - (openclaw_memory.scaffold.create_flush_tool | default(true)) | bool
 
 - name: Check for shared knowledge directory
   stat:

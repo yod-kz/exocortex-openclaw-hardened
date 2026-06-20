@@ -543,6 +543,7 @@
 {% endfor %}
 {% if _memory_active.enabled | default(false) %}
 {%   set _memory_active_qmd = _memory_active.qmd | default({}) %}
+{%   set _memory_active_assoc = _memory_active.associative_recall | default({}) %}
 {%   set _active_config = {
        'enabled': true,
        'agents': _memory_active.agents | default([]),
@@ -553,6 +554,17 @@
        'maxSummaryChars': _memory_active.max_summary_chars | default(220),
        'persistTranscripts': _memory_active.persist_transcripts | default(false),
        'logging': _memory_active.logging | default(true),
+       'associativeRecall': {
+         'enabled': _memory_active_assoc.enabled | default(false),
+         'intrusionRate': _memory_active_assoc.intrusion_rate | default(0.07),
+         'maxSnippets': _memory_active_assoc.max_snippets | default(1),
+         'maxSnippetChars': _memory_active_assoc.max_snippet_chars | default(240),
+         'minSignalCount': _memory_active_assoc.min_signal_count | default(1),
+         'minScore': _memory_active_assoc.min_score | default(0),
+         'maxAgeDays': _memory_active_assoc.max_age_days | default(90),
+         'includePromoted': _memory_active_assoc.include_promoted | default(false),
+         'recencyHalfLifeDays': _memory_active_assoc.recency_half_life_days | default(14)
+       },
        'qmd': {
          'searchMode': _memory_active_qmd.search_mode | default('inherit')
        }
