@@ -424,8 +424,19 @@ emit top-level `memory.qmd`, `plugins.entries.active-memory`, and
 | `openclaw_memory.active_memory.associative_recall.max_snippets` | int | `1` | Maximum snippets injected on a triggered turn |
 | `openclaw_memory.active_memory.associative_recall.min_signal_count` | int | `1` | Minimum recall/daily/grounded signal count before a snippet can resurface |
 | `openclaw_memory.active_memory.associative_recall.max_age_days` | int | `90` | Exclude snippets last recalled more than this many days ago |
+| `openclaw_memory.active_memory.associative_recall.include_structural` | bool | `true` | Blend graph/PyKEEN structural recall artifacts when `workspace/memory/graph/structural-recall.jsonl` exists |
 | `openclaw_memory.dreaming.enabled` | bool | `false` | Enable `memory-core` dreaming sweeps |
 | `openclaw_memory.dreaming.deep.promotion_target_path` | string | `memory/promoted.md` | Warm review file for automated deep promotions |
+| `openclaw_memory.graph.enabled` | bool | `false` | Scaffold and optionally schedule graph-memory/PyKEEN artifacts for private memory agents |
+| `openclaw_memory.graph.create_tools` | bool | `true` | Copy graph-memory pipeline/query/PyKEEN tools to `workspace/tools/graph-memory/` |
+| `openclaw_memory.graph.include_sessions` | bool | `true` | Include session JSONL files in graph extraction when available |
+| `openclaw_memory.graph.extractor` | string | `heuristic` | Graph extractor mode: deterministic `heuristic`, `agy`, or `auto` |
+| `openclaw_memory.graph.agy_timeout` | int | `20` | Per-chunk `agy -p` timeout in seconds when agy extraction is enabled |
+| `openclaw_memory.graph.agy_max_chunks` | int | `0` | Maximum chunks sent to agy; `0` means unlimited when agy extraction is enabled |
+| `openclaw_memory.graph.run_on_deploy` | bool | `false` | Run graph extraction once during deploy |
+| `openclaw_memory.graph.cron_enabled` | bool | `false` | Install a per-agent openclaw-user cron job for graph extraction |
+| `openclaw_memory.graph.pykeen.enabled` | bool | `true` | Run `pykeen_structural.py`; it uses PyKEEN when installed and deterministic structural embeddings otherwise |
+| `openclaw_memory.graph.pykeen.prediction_limit` | int | `200` | Maximum link-prediction rows exported under `workspace/memory/graph/pykeen/` |
 | `openclaw_memory.scaffold.create_bootstrap_files` | bool | `true` | Create missing `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `TOOLS.md`, and `HEARTBEAT.md` bootstrap files |
 | `openclaw_memory.scaffold.create_tier2_files` | bool | `true` | Create missing warm tier-2 memory files under `memory/` |
 | `openclaw_memory.scaffold.sidecar_queue_policy` | string | `fail` | `fail`, `warn`, or ignore legacy `.memory-queue` sidecars during state setup |
@@ -434,12 +445,13 @@ emit top-level `memory.qmd`, `plugins.entries.active-memory`, and
 
 Use `memory/promoted.md` for automated promotions and keep
 `workspace/MEMORY.md` human-curated. Associative recall reads memory-core's
-short-term reinforcement state through native active-memory and injects escaped
-untrusted metadata; enable it only for private memory agents. The `agent_state`
-role scaffolds bootstrap files, `MEMORY.md`, tier-2 warm files,
-`memory/promoted.md`, `memory/.dreams/`, the brute-force recall helper, the
-append-only flush helper, and the daily log with create-if-absent semantics
-only.
+short-term reinforcement state and `workspace/memory/graph/structural-recall.jsonl`
+through native active-memory, then injects escaped untrusted metadata; enable it
+only for private memory agents. The `agent_state` role scaffolds bootstrap
+files, `MEMORY.md`, tier-2 warm files, `memory/promoted.md`, `memory/.dreams/`,
+typed graph/PyKEEN artifacts under `workspace/memory/graph/`, the brute-force
+recall helper, the append-only flush helper, and the daily log with
+create-if-absent semantics only.
 
 ### openclaw_agents
 

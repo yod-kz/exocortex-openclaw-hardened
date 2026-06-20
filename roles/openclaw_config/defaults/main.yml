@@ -83,6 +83,7 @@ _openclaw_memory_defaults: &openclaw_memory_defaults
       min_score: 0
       max_age_days: 90
       include_promoted: false
+      include_structural: true
       recency_half_life_days: 14
     qmd:
       search_mode: "inherit"
@@ -105,6 +106,29 @@ _openclaw_memory_defaults: &openclaw_memory_defaults
       min_unique_queries: 3
       max_age_days: 30
       max_promoted_snippet_tokens: 160
+  graph:
+    enabled: false
+    create_tools: true
+    include_sessions: true
+    extractor: "heuristic"
+    agy_timeout: 20
+    agy_max_chunks: 0
+    run_on_deploy: false
+    cron_enabled: false
+    structural_recall_limit: 200
+    schedule:
+      minute: "0"
+      hour: "7"
+      day: "*"
+      month: "*"
+      weekday: "*"
+    pykeen:
+      enabled: true
+      dim: 64
+      epochs: 20
+      similar_limit: 200
+      prediction_limit: 200
+      recall_limit: 120
   scaffold:
     enabled: true
     create_bootstrap_files: true

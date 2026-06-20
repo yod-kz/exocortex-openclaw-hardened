@@ -405,6 +405,114 @@
     - (openclaw_memory.scaffold.enabled | default(true)) | bool
     - (openclaw_memory.scaffold.create_flush_tool | default(true)) | bool
 
+- name: Ensure graph memory directories exist
+  file:
+    path: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/memory/{{ item.1 }}"
+    state: directory
+    owner: openclaw
+    group: openclaw
+    mode: "0750"
+  loop: "{{ openclaw_agents | product(['graph', 'graph/pykeen']) | list }}"
+  loop_control:
+    label: "{{ item.0.id }}:memory/{{ item.1 }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.0.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+    _graph_enabled: "{{ openclaw_memory.graph.enabled | default(false) }}"
+  when:
+    - item.0.state_repo is defined
+    - item.0.state_path is defined
+    - _agent_memory_enabled | bool
+    - _graph_enabled | bool
+
+- name: Copy graph memory pipeline tools
+  copy:
+    src: "graph-memory/"
+    dest: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/tools/graph-memory/"
+    force: true
+    owner: openclaw
+    group: openclaw
+    mode: preserve
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+    _graph_enabled: "{{ openclaw_memory.graph.enabled | default(false) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - _graph_enabled | bool
+    - (openclaw_memory.graph.create_tools | default(true)) | bool
+
+- name: Run graph memory pipeline on deploy
+  command: >
+    {{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/tools/graph-memory/run_graph_memory.sh
+    --workspace {{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace
+    --extractor {{ openclaw_memory.graph.extractor | default('heuristic') }}
+    --agy-timeout {{ openclaw_memory.graph.agy_timeout | default(20) }}
+    --agy-max-chunks {{ openclaw_memory.graph.agy_max_chunks | default(0) }}
+    --structural-recall-limit {{ openclaw_memory.graph.structural_recall_limit | default(200) }}
+    --pykeen-dim {{ openclaw_memory.graph.pykeen.dim | default(64) }}
+    --pykeen-epochs {{ openclaw_memory.graph.pykeen.epochs | default(20) }}
+    --pykeen-similar-limit {{ openclaw_memory.graph.pykeen.similar_limit | default(200) }}
+    --pykeen-prediction-limit {{ openclaw_memory.graph.pykeen.prediction_limit | default(200) }}
+    --pykeen-recall-limit {{ openclaw_memory.graph.pykeen.recall_limit | default(120) }}
+    {% if openclaw_memory.graph.include_sessions | default(true) %}--include-sessions{% endif %}
+    {% if not (openclaw_memory.graph.pykeen.enabled | default(true)) %}--skip-pykeen{% endif %}
+  become_user: openclaw
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+    _graph_enabled: "{{ openclaw_memory.graph.enabled | default(false) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - _graph_enabled | bool
+    - (openclaw_memory.graph.create_tools | default(true)) | bool
+    - (openclaw_memory.graph.run_on_deploy | default(false)) | bool
+
+- name: Schedule graph memory pipeline
+  cron:
+    name: "openclaw graph memory {{ item.id }}"
+    user: openclaw
+    minute: "{{ openclaw_memory.graph.schedule.minute | default('0') }}"
+    hour: "{{ openclaw_memory.graph.schedule.hour | default('7') }}"
+    day: "{{ openclaw_memory.graph.schedule.day | default('*') }}"
+    month: "{{ openclaw_memory.graph.schedule.month | default('*') }}"
+    weekday: "{{ openclaw_memory.graph.schedule.weekday | default('*') }}"
+    job: >-
+      {{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/tools/graph-memory/run_graph_memory.sh
+      --workspace {{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace
+      --extractor {{ openclaw_memory.graph.extractor | default('heuristic') }}
+      --agy-timeout {{ openclaw_memory.graph.agy_timeout | default(20) }}
+      --agy-max-chunks {{ openclaw_memory.graph.agy_max_chunks | default(0) }}
+      --structural-recall-limit {{ openclaw_memory.graph.structural_recall_limit | default(200) }}
+      --pykeen-dim {{ openclaw_memory.graph.pykeen.dim | default(64) }}
+      --pykeen-epochs {{ openclaw_memory.graph.pykeen.epochs | default(20) }}
+      --pykeen-similar-limit {{ openclaw_memory.graph.pykeen.similar_limit | default(200) }}
+      --pykeen-prediction-limit {{ openclaw_memory.graph.pykeen.prediction_limit | default(200) }}
+      --pykeen-recall-limit {{ openclaw_memory.graph.pykeen.recall_limit | default(120) }}
+      {% if openclaw_memory.graph.include_sessions | default(true) %}--include-sessions{% endif %}
+      {% if not (openclaw_memory.graph.pykeen.enabled | default(true)) %}--skip-pykeen{% endif %}
+      >> {{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/memory/graph/graph-memory.log 2>&1
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+    _graph_enabled: "{{ openclaw_memory.graph.enabled | default(false) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - _graph_enabled | bool
+    - (openclaw_memory.graph.create_tools | default(true)) | bool
+    - (openclaw_memory.graph.cron_enabled | default(false)) | bool
+
 - name: Check for shared knowledge directory
   stat:
     path: "{{ openclaw_data_dir }}/state-repos/{{ _agent_repos_https[0] | hash('md5') }}/shared"

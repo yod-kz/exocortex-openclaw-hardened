@@ -143,6 +143,10 @@ For private memory with public Slack isolation, use the example's
 - keep automated deep promotions in `memory/promoted.md`
 - keep Tier 1 hot memory human-curated; use the scaffolded tier-2 files and
   `tools/aineko-recall.sh` for bulky on-demand recall
+- enable `openclaw_memory.graph` for private agents when you want graph memory
+  and PyKEEN-style structural embeddings; the typed graph artifacts and
+  `workspace/memory/graph/structural-recall.jsonl` are automatically blended
+  into associative recall when `include_structural` is true
 - append durable pre-compaction and heartbeat notes with
   `tools/aineko-flush.sh`; it writes only to the canonical
   `memory/YYYY-MM-DD.md` daily log
@@ -166,6 +170,38 @@ scripts/verify-aineko-memory-guardrails.sh \
 The check fails if bootstrap files changed, `MEMORY.md` shrank, a legacy queue is
 still present, automated promotion markers land in hot memory, or the private
 canary appears in a public workspace.
+
+Build or inspect graph memory manually from an agent workspace:
+
+```bash
+tools/graph-memory/run_graph_memory.sh --workspace "$PWD" --include-sessions
+tools/graph-memory/graph_query.py --workspace "$PWD" --stats
+tools/graph-memory/graph_query.py --workspace "$PWD" --relations
+tools/graph-memory/graph_query.py --workspace "$PWD" --connections Locksmith
+tools/graph-memory/graph_query.py --workspace "$PWD" --similar Locksmith
+tools/graph-memory/graph_query.py --workspace "$PWD" --predict Locksmith AUTHENTICATES_WITH
+tools/graph-memory/graph_query.py --workspace "$PWD" --structural-recall 10
+tools/graph-memory/graph_eval.py --workspace "$PWD" --require-pykeen
+```
+
+`run_graph_memory.sh` writes `workspace/memory/graph/entities.jsonl`,
+`workspace/memory/graph/edges.jsonl`, `workspace/memory/graph/graph.sqlite`,
+`workspace/memory/graph/.ingestion_state.json`, PyKEEN/fallback embeddings,
+relation embeddings, similarity rows, training triples, and link predictions
+under `workspace/memory/graph/pykeen/`, and
+`workspace/memory/graph/structural-recall.jsonl`. Native associative recall
+reads that last file on triggered turns, validates source paths, escapes
+snippets, and labels injected rows with `source="graph"` or `source="pykeen"`
+plus graph provenance.
+
+`graph_eval.py` verifies schema version, source provenance, polarity coverage,
+structural recall bounds, PyKEEN/fallback artifacts, and a basic vector ranking
+metric. It is intentionally small enough to run from the deploy verifier.
+
+The default extractor is deterministic heuristic extraction with typed
+relations and explicit negation polarity. Set `openclaw_memory.graph.extractor`
+to `agy` or `auto` only on hosts where `agy -p` is available and acceptable for
+the corpus volume.
 
 ## Adding a New Model
 

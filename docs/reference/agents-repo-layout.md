@@ -20,6 +20,11 @@ my-agents/
 │   │   │   ├── AGENTS.md               # System prompt and instructions
 │   │   │   ├── TOOLS.md                # Tool-specific instructions
 │   │   │   ├── MEMORY.md               # Always-in-context core memory (~3K tokens)
+│   │   │   ├── memory/
+│   │   │   │   └── graph/
+│   │   │   │       ├── graph.sqlite    # Typed graph-memory query store
+│   │   │   │       ├── structural-recall.jsonl  # Input to associative recall
+│   │   │   │       └── pykeen/         # Embeddings, similarity, predictions
 │   │   │   ├── BOOTSTRAP.md            # First-session setup instructions
 │   │   │   ├── HEARTBEAT.md            # Periodic task schedule
 │   │   │   └── skills/
@@ -100,6 +105,7 @@ search.
 | `work.sqlite` | Work context and project tracking |
 | `dumps/*.sql` | Portable SQL dumps for bootstrapping new hosts |
 | `entities/` | JSON exports of the knowledge graph |
+| `workspace/memory/graph/` | OpenClaw typed graph memory, structural recall, and PyKEEN/fallback embeddings, similarity, and link predictions consumed by active-memory |
 | `pipelines/` | Shell scripts for memory extraction and querying |
 
 SQL dumps are automatically restored to `.sqlite` files by the `agent_state`

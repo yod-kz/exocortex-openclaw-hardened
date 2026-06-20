@@ -58,6 +58,7 @@ openclaw_memory:
       max_snippet_chars: 240
       min_signal_count: 1
       max_age_days: 90
+      include_structural: true
   dreaming:
     enabled: true
     frequency: "0 3 * * *"
@@ -69,6 +70,17 @@ openclaw_memory:
       min_score: 0.8
       min_recall_count: 3
       min_unique_queries: 3
+  graph:
+    enabled: true
+    # Graph/PyKEEN artifacts feed associative recall through
+    # workspace/memory/graph/structural-recall.jsonl.
+    create_tools: true
+    include_sessions: true
+    extractor: "heuristic"
+    cron_enabled: true
+    pykeen:
+      enabled: true
+      prediction_limit: 200
   scaffold:
     enabled: true
     create_bootstrap_files: true

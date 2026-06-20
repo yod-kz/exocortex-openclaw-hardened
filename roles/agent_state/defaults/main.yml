@@ -5,6 +5,29 @@ openclaw_data_dir: "/home/openclaw/.openclaw"
 
 openclaw_memory:
   enabled: false
+  graph:
+    enabled: false
+    create_tools: true
+    include_sessions: true
+    extractor: "heuristic"
+    agy_timeout: 20
+    agy_max_chunks: 0
+    run_on_deploy: false
+    cron_enabled: false
+    structural_recall_limit: 200
+    schedule:
+      minute: "0"
+      hour: "7"
+      day: "*"
+      month: "*"
+      weekday: "*"
+    pykeen:
+      enabled: true
+      dim: 64
+      epochs: 20
+      similar_limit: 200
+      prediction_limit: 200
+      recall_limit: 120
   scaffold:
     enabled: true
     create_bootstrap_files: true

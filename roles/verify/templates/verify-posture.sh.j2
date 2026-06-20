@@ -129,6 +129,7 @@ check "memory: QMD backend rendered"      "grep -q '\"backend\": \"qmd\"' /home/
 {% if openclaw_memory.active_memory.enabled | default(false) %}
 check "memory: active-memory rendered"    "grep -q '\"active-memory\"' /home/openclaw/.openclaw/openclaw.json"
 check "memory: associative recall rendered" "grep -q '\"associativeRecall\"' /home/openclaw/.openclaw/openclaw.json"
+check "memory: structural recall enabled" "grep -q '\"includeStructural\": true' /home/openclaw/.openclaw/openclaw.json"
 {% endif %}
 {% if openclaw_memory.dreaming.enabled | default(false) %}
 check "memory: memory-core rendered"      "grep -q '\"memory-core\"' /home/openclaw/.openclaw/openclaw.json"
@@ -154,6 +155,20 @@ check "memory: {{ agent.id }} recall helper exists"  "test -x /home/openclaw/.op
 {% endif %}
 {% if openclaw_memory.scaffold.create_flush_tool | default(true) %}
 check "memory: {{ agent.id }} flush helper exists"   "test -x /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/tools/aineko-flush.sh"
+{% endif %}
+{% if openclaw_memory.graph.enabled | default(false) and openclaw_memory.graph.create_tools | default(true) %}
+check "memory: {{ agent.id }} graph tools exist"     "test -x /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/tools/graph-memory/run_graph_memory.sh && test -x /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/tools/graph-memory/graph_query.py && test -x /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/tools/graph-memory/pykeen_structural.py && test -x /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/tools/graph-memory/graph_eval.py"
+check "memory: {{ agent.id }} graph dir exists"      "test -d /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/memory/graph"
+{% if openclaw_memory.graph.run_on_deploy | default(false) %}
+check "memory: {{ agent.id }} graph recall artifact" "test -f /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/memory/graph/structural-recall.jsonl"
+check "memory: {{ agent.id }} graph v2 metadata"    "grep -q 'openclaw.graph-memory.v2' /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/memory/graph/metadata.json"
+check "memory: {{ agent.id }} graph typed edges"    "test -s /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/memory/graph/edges.jsonl && grep -q '\"relation\"' /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/memory/graph/edges.jsonl && grep -q '\"polarity\"' /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/memory/graph/edges.jsonl"
+{% if openclaw_memory.graph.pykeen.enabled | default(true) %}
+check "memory: {{ agent.id }} pykeen embeddings"    "test -s /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/memory/graph/pykeen/entity-embeddings.jsonl && test -s /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/memory/graph/pykeen/relation-embeddings.jsonl"
+check "memory: {{ agent.id }} pykeen predictions"   "test -f /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/memory/graph/pykeen/link-predictions.jsonl"
+check "memory: {{ agent.id }} graph eval"           "python3 /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/tools/graph-memory/graph_eval.py --workspace /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace --require-pykeen >/dev/null"
+{% endif %}
+{% endif %}
 {% endif %}
 check "memory: {{ agent.id }} hot memory marker-free" "! grep -q 'openclaw-memory-promotion:' /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/MEMORY.md 2>/dev/null"
 {% endif %}
