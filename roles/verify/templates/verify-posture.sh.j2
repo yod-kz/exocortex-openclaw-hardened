@@ -120,6 +120,38 @@ check "gateway listening on :{{ openclaw.gateway_port }}"  "ss -tlnp | grep -q '
 {% endif %}
 check "openclaw.json exists"             "test -f /home/openclaw/.openclaw/openclaw.json"
 
+{% if openclaw_memory.qmd.enabled | default(false) or openclaw_memory.active_memory.enabled | default(false) or openclaw_memory.dreaming.enabled | default(false) %}
+echo ""
+echo -e "${CYAN}Native Memory Guardrails${NC}"
+{% if openclaw_memory.qmd.enabled | default(false) %}
+check "memory: QMD backend rendered"      "grep -q '\"backend\": \"qmd\"' /home/openclaw/.openclaw/openclaw.json"
+{% endif %}
+{% if openclaw_memory.active_memory.enabled | default(false) %}
+check "memory: active-memory rendered"    "grep -q '\"active-memory\"' /home/openclaw/.openclaw/openclaw.json"
+{% endif %}
+{% if openclaw_memory.dreaming.enabled | default(false) %}
+check "memory: memory-core rendered"      "grep -q '\"memory-core\"' /home/openclaw/.openclaw/openclaw.json"
+check "memory: warm promotion target"     "grep -q '\"promotionTargetPath\": \"memory/promoted.md\"' /home/openclaw/.openclaw/openclaw.json"
+{% endif %}
+{% for agent in openclaw_agents | default([]) %}
+{% set agent_memory_enabled = (agent.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) %}
+{% if agent_memory_enabled %}
+check "memory: {{ agent.id }} no legacy queue"       "test ! -e /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/.memory-queue && test ! -e /home/openclaw/.openclaw/agents/{{ agent.id }}/.memory-queue"
+check "memory: {{ agent.id }} hot MEMORY.md exists"  "test -f /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/MEMORY.md"
+check "memory: {{ agent.id }} promoted.md exists"    "test -f /home/openclaw/.openclaw/agents/{{ agent.id }}/memory/promoted.md"
+check "memory: {{ agent.id }} hot memory marker-free" "! grep -q 'openclaw-memory-promotion:' /home/openclaw/.openclaw/agents/{{ agent.id }}/workspace/MEMORY.md 2>/dev/null"
+{% endif %}
+{% endfor %}
+{% if verify.memory_canary | default('') != '' %}
+{% for agent in openclaw_agents | default([]) %}
+{% set agent_memory_enabled = (agent.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) %}
+{% if not agent_memory_enabled %}
+check "memory: canary absent from {{ agent.id }}" "! grep -R -F -- '{{ verify.memory_canary }}' /home/openclaw/.openclaw/agents/{{ agent.id }} >/dev/null 2>&1"
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+
 {% if openclaw_agents | default([]) | length > 0 %}
 echo ""
 echo -e "${CYAN}Agent Sandbox Isolation${NC}"

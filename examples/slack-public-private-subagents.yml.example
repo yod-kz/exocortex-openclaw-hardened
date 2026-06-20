@@ -21,11 +21,57 @@ locksmith:
     app_token_env: "SLACK_APP_TOKEN"
     user_token_env: "SLACK_USER_TOKEN"
 
+openclaw_memory:
+  # Global memory stays opt-in per agent. The private Matt agent below enables
+  # it; public agents remain memory-dark.
+  enabled: false
+  qmd:
+    enabled: true
+    search_mode: "search"
+    include_default_memory: true
+    sessions:
+      enabled: false
+      retention_days: 14
+    scope:
+      default: "deny"
+      rules:
+        - action: "allow"
+          match:
+            chatType: "direct"
+  active_memory:
+    enabled: true
+    agents:
+      - "matt"
+    allowed_chat_types:
+      - "direct"
+    query_mode: "recent"
+    prompt_style: "balanced"
+    timeout_ms: 15000
+    max_summary_chars: 220
+    persist_transcripts: false
+    logging: true
+  dreaming:
+    enabled: true
+    frequency: "0 3 * * *"
+    deep:
+      enabled: true
+      # Machine promotions land in warm review memory, not the hot
+      # always-injected workspace/MEMORY.md file.
+      promotion_target_path: "memory/promoted.md"
+      min_score: 0.8
+      min_recall_count: 3
+      min_unique_queries: 3
+  scaffold:
+    enabled: true
+    sidecar_queue_policy: "fail"
+
 openclaw_agents:
   - id: "matt"
     default: true
     name: "Matt Private"
     workspace_subdir: "matt"
+    memory:
+      enabled: true
     memory_search: true
     state_repo: "https://github.com/your-org/your-agents.git"
     state_path: "agents/matt"
@@ -71,6 +117,8 @@ openclaw_agents:
   - id: "public"
     name: "Public Slack"
     workspace_subdir: "public"
+    memory:
+      enabled: false
     memory_search: false
     state_repo: "https://github.com/your-org/your-agents.git"
     state_path: "agents/public"

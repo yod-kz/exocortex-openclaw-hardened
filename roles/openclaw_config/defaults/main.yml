@@ -38,6 +38,72 @@ openclaw_agents: []
 # matching the OpenClaw JSON schema. Agent-scoped channels use snake_case (bot_token).
 openclaw_channels: {}
 
+# Native OpenClaw memory stack. Disabled by default so existing deployments do
+# not change behavior until a site opts in.
+_openclaw_memory_defaults: &openclaw_memory_defaults
+  enabled: false
+  qmd:
+    enabled: false
+    command: "qmd"
+    search_mode: "search"
+    include_default_memory: true
+    sessions:
+      enabled: false
+      retention_days: 14
+    update:
+      interval: "5m"
+      debounce_ms: 15000
+    limits:
+      max_results: 6
+      timeout_ms: 4000
+    scope:
+      default: "deny"
+      rules:
+        - action: "allow"
+          match:
+            chatType: "direct"
+    paths: []
+  active_memory:
+    enabled: false
+    agents: []
+    allowed_chat_types:
+      - "direct"
+    query_mode: "recent"
+    prompt_style: "balanced"
+    timeout_ms: 15000
+    max_summary_chars: 220
+    persist_transcripts: false
+    logging: true
+    qmd:
+      search_mode: "inherit"
+  dreaming:
+    enabled: false
+    frequency: "0 3 * * *"
+    timezone: ""
+    model: ""
+    verbose_logging: false
+    light:
+      enabled: true
+    rem:
+      enabled: true
+    deep:
+      enabled: true
+      promotion_target_path: "memory/promoted.md"
+      limit: 10
+      min_score: 0.8
+      min_recall_count: 3
+      min_unique_queries: 3
+      max_age_days: 30
+      max_promoted_snippet_tokens: 160
+  scaffold:
+    enabled: true
+    create_memory_md: true
+    create_promoted_md: true
+    create_daily_log: true
+    sidecar_queue_policy: "fail"
+
+openclaw_memory: *openclaw_memory_defaults
+
 # Additional OpenClaw route/ACP bindings appended after automatically generated
 # per-agent channel account bindings.
 openclaw_bindings: []

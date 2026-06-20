@@ -2,3 +2,12 @@
 # openclaw_agents defined in site config; empty by default
 openclaw_agents: []
 openclaw_data_dir: "/home/openclaw/.openclaw"
+
+openclaw_memory:
+  enabled: false
+  scaffold:
+    enabled: true
+    create_memory_md: true
+    create_promoted_md: true
+    create_daily_log: true
+    sidecar_queue_policy: "fail"

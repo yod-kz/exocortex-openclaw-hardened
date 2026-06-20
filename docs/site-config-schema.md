@@ -403,6 +403,31 @@ When enabled, the `openclaw_config` template sets `memorySearch.provider: "ollam
 for agents with `memory_search: true`. Model pulls use a temporary nftables
 egress rule (same pattern as OpenClaw upgrades).
 
+### openclaw_memory
+
+Native OpenClaw memory stack. Disabled by default. When enabled, the renderer can
+emit top-level `memory.qmd`, `plugins.entries.active-memory`, and
+`plugins.entries.memory-core.config.dreaming`.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `openclaw_memory.enabled` | bool | `false` | Default per-agent memory posture; agents can override with `openclaw_agents[].memory.enabled` |
+| `openclaw_memory.qmd.enabled` | bool | `false` | Render OpenClaw `memory.backend: "qmd"` and `memory.qmd` |
+| `openclaw_memory.qmd.search_mode` | string | `search` | QMD search mode: `search`, `vsearch`, or `query` |
+| `openclaw_memory.qmd.include_default_memory` | bool | `true` | Index `MEMORY.md` and `memory/**/*.md` |
+| `openclaw_memory.qmd.sessions.enabled` | bool | `false` | Index session transcripts |
+| `openclaw_memory.qmd.scope` | object | direct-only | OpenClaw session policy controlling where QMD results can surface |
+| `openclaw_memory.active_memory.enabled` | bool | `false` | Enable the bundled `active-memory` plugin |
+| `openclaw_memory.active_memory.agents` | list | `[]` | Agent IDs allowed to run active recall |
+| `openclaw_memory.dreaming.enabled` | bool | `false` | Enable `memory-core` dreaming sweeps |
+| `openclaw_memory.dreaming.deep.promotion_target_path` | string | `memory/promoted.md` | Warm review file for automated deep promotions |
+| `openclaw_memory.scaffold.sidecar_queue_policy` | string | `fail` | `fail`, `warn`, or ignore legacy `.memory-queue` sidecars during state setup |
+
+Use `memory/promoted.md` for automated promotions and keep
+`workspace/MEMORY.md` human-curated. The `agent_state` role scaffolds
+`MEMORY.md`, `memory/promoted.md`, `memory/.dreams/`, and the daily log with
+create-if-absent semantics only.
+
 ### openclaw_agents
 
 Agent definitions. Empty by default; define in site config.
@@ -412,6 +437,7 @@ Agent definitions. Empty by default; define in site config.
 | `id` | string | yes | Unique agent identifier (used in directory paths) |
 | `name` | string | no | Display name (defaults to `id`) |
 | `skills` | list of string | no | Skills enabled for this agent (default: `[]`) |
+| `memory.enabled` | bool | no | Per-agent native memory posture; overrides `openclaw_memory.enabled` |
 | `memory_search` | bool | no | Enable memory search for the agent (default: `false`) |
 | `state_repo` | string | no | Git repo URL for agent state (workspace + memory dumps) |
 | `state_path` | string | no | Path within the state repo for this agent's data |

@@ -97,6 +97,148 @@
     label: "{{ item.id }}"
   when: item.state_repo is defined and item.state_path is defined
 
+- name: Check legacy memory sidecar queue at workspace root
+  stat:
+    path: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/.memory-queue"
+  register: _memory_queue_workspace
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+
+- name: Check legacy memory sidecar queue at agent root
+  stat:
+    path: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/.memory-queue"
+  register: _memory_queue_agent_root
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+
+- name: Fail if legacy memory sidecar queue is present
+  fail:
+    msg: >-
+      Agent '{{ item.item.id }}' still has legacy .memory-queue at {{ item.stat.path | default(item.invocation.module_args.path | default('unknown path')) }}.
+      Native active-memory/dreaming replaces the queue; remove or migrate it before enabling openclaw_memory.
+  loop: "{{ (_memory_queue_workspace.results | default([])) + (_memory_queue_agent_root.results | default([])) }}"
+  loop_control:
+    label: "{{ item.item.id | default('unknown') }}"
+  when:
+    - item.stat is defined
+    - item.stat.exists | default(false)
+    - (openclaw_memory.scaffold.sidecar_queue_policy | default('fail')) == 'fail'
+
+- name: Warn if legacy memory sidecar queue is present
+  debug:
+    msg: >-
+      Agent '{{ item.item.id }}' still has legacy .memory-queue at {{ item.stat.path | default(item.invocation.module_args.path | default('unknown path')) }}.
+      Native active-memory/dreaming should not run beside the queue.
+  loop: "{{ (_memory_queue_workspace.results | default([])) + (_memory_queue_agent_root.results | default([])) }}"
+  loop_control:
+    label: "{{ item.item.id | default('unknown') }}"
+  when:
+    - item.stat is defined
+    - item.stat.exists | default(false)
+    - (openclaw_memory.scaffold.sidecar_queue_policy | default('fail')) == 'warn'
+
+- name: Ensure native memory state directories exist
+  file:
+    path: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/memory/.dreams"
+    state: directory
+    owner: openclaw
+    group: openclaw
+    mode: "0750"
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+
+- name: Create hot MEMORY.md only if absent
+  copy:
+    dest: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/workspace/MEMORY.md"
+    content: |
+      # Long-Term Memory
+
+      Human-curated hot memory. Automated promotions should land in memory/promoted.md for review.
+    force: false
+    owner: openclaw
+    group: openclaw
+    mode: "0640"
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+    - (openclaw_memory.scaffold.create_memory_md | default(true)) | bool
+
+- name: Create promoted memory review file only if absent
+  copy:
+    dest: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/memory/promoted.md"
+    content: |
+      # Promoted Memory Review
+
+      Machine-generated durable memory candidates land here. Review and curate only selected facts into workspace/MEMORY.md.
+    force: false
+    owner: openclaw
+    group: openclaw
+    mode: "0640"
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+    - (openclaw_memory.scaffold.create_promoted_md | default(true)) | bool
+
+- name: Create today's memory log only if absent
+  copy:
+    dest: "{{ openclaw_data_dir }}/state-repos/{{ _repo_hash_map[item.state_repo] }}/{{ item.state_path }}/memory/{{ ansible_facts['date_time']['date'] }}.md"
+    content: |
+      # {{ ansible_facts['date_time']['date'] }}
+
+    force: false
+    owner: openclaw
+    group: openclaw
+    mode: "0640"
+  loop: "{{ openclaw_agents }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    _agent_memory_enabled: "{{ (item.memory | default({})).enabled | default(openclaw_memory.enabled | default(false)) }}"
+  when:
+    - item.state_repo is defined
+    - item.state_path is defined
+    - _agent_memory_enabled | bool
+    - (openclaw_memory.scaffold.enabled | default(true)) | bool
+    - (openclaw_memory.scaffold.create_daily_log | default(true)) | bool
+
 - name: Check for shared knowledge directory
   stat:
     path: "{{ openclaw_data_dir }}/state-repos/{{ _agent_repos_https[0] | hash('md5') }}/shared"

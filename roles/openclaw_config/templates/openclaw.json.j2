@@ -14,6 +14,11 @@
 {% set _slack_bot_tool_name = _slack_native.bot_tool_name | default('slack-bot') %}
 {% set _slack_app_tool_name = _slack_native.app_tool_name | default('slack-app') %}
 {% set _slack_user_tool_name = _slack_native.user_tool_name | default('slack-user') %}
+{% set _memory_cfg = openclaw_memory | default({}) %}
+{% set _memory_qmd = _memory_cfg.qmd | default({}) %}
+{% set _memory_qmd_enabled = _memory_qmd.enabled | default(false) %}
+{% set _memory_active = _memory_cfg.active_memory | default({}) %}
+{% set _memory_dreaming = _memory_cfg.dreaming | default({}) %}
 {# ── Agent-scoped channel accounts ───────────────────────────────── #}
 {# Collect agents that define their own Slack or Telegram identity.   #}
 {# Each entry: {agent: <agent dict>, slack: <merged>, telegram: <merged>} #}
@@ -129,6 +134,9 @@
     }{% if openclaw_agents | default([]) | length > 0 %},
     "list": [
 {% for agent in openclaw_agents %}
+{% set _agent_memory_cfg = _memory_cfg | combine(agent.memory | default({}), recursive=True) %}
+{% set _agent_memory_search_cfg = _agent_memory_cfg.search | default({}) %}
+{% set _agent_memory_search_enabled = agent.memory_search | default(_agent_memory_cfg.enabled | default(false)) %}
       {
         "id": "{{ agent.id }}",
         "name": "{{ agent.name | default(agent.id) }}",
@@ -158,11 +166,11 @@
         "skills": {{ agent.skills | to_json }},
 {% endif %}
         "memorySearch": {
-          "enabled": {{ agent.memory_search | default(false) | to_json }},
-          "sources": ["memory", "sessions"],
+          "enabled": {{ _agent_memory_search_enabled | bool | to_json }},
+          "sources": {{ _agent_memory_search_cfg.sources | default(["memory", "sessions"]) | to_json }},
           "extraPaths": [
             "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/shared"
-          ]{% if ollama.enabled | default(false) and agent.memory_search | default(false) %},
+          ]{% if ollama.enabled | default(false) and _agent_memory_search_enabled | bool %},
           "provider": "ollama",
           "remote": {
             "baseUrl": "http://{{ ollama.host | default('127.0.0.1') }}:{{ ollama.port | default(11434) }}"
@@ -202,6 +210,73 @@
   "messages": {
     "ackReactionScope": "group-mentions"
   },
+{% if _memory_qmd_enabled %}
+{% set _memory_qmd_update = _memory_qmd.update | default({}) %}
+{% set _memory_qmd_limits = _memory_qmd.limits | default({}) %}
+{% set _memory_qmd_sessions = _memory_qmd.sessions | default({}) %}
+{% set _qmd_update = {'interval': _memory_qmd_update.interval | default('5m'), 'debounceMs': _memory_qmd_update.debounce_ms | default(15000)} %}
+{% if _memory_qmd_update.on_boot is defined %}
+{%   set _ = _qmd_update.update({'onBoot': _memory_qmd_update.on_boot}) %}
+{% endif %}
+{% if _memory_qmd_update.startup is defined %}
+{%   set _ = _qmd_update.update({'startup': _memory_qmd_update.startup}) %}
+{% endif %}
+{% if _memory_qmd_update.startup_delay_ms is defined %}
+{%   set _ = _qmd_update.update({'startupDelayMs': _memory_qmd_update.startup_delay_ms}) %}
+{% endif %}
+{% if _memory_qmd_update.wait_for_boot_sync is defined %}
+{%   set _ = _qmd_update.update({'waitForBootSync': _memory_qmd_update.wait_for_boot_sync}) %}
+{% endif %}
+{% if _memory_qmd_update.embed_interval is defined %}
+{%   set _ = _qmd_update.update({'embedInterval': _memory_qmd_update.embed_interval}) %}
+{% endif %}
+{% if _memory_qmd_update.command_timeout_ms is defined %}
+{%   set _ = _qmd_update.update({'commandTimeoutMs': _memory_qmd_update.command_timeout_ms}) %}
+{% endif %}
+{% if _memory_qmd_update.update_timeout_ms is defined %}
+{%   set _ = _qmd_update.update({'updateTimeoutMs': _memory_qmd_update.update_timeout_ms}) %}
+{% endif %}
+{% if _memory_qmd_update.embed_timeout_ms is defined %}
+{%   set _ = _qmd_update.update({'embedTimeoutMs': _memory_qmd_update.embed_timeout_ms}) %}
+{% endif %}
+{% set _qmd_limits = {'maxResults': _memory_qmd_limits.max_results | default(6), 'timeoutMs': _memory_qmd_limits.timeout_ms | default(4000)} %}
+{% if _memory_qmd_limits.max_snippet_chars is defined %}
+{%   set _ = _qmd_limits.update({'maxSnippetChars': _memory_qmd_limits.max_snippet_chars}) %}
+{% endif %}
+{% if _memory_qmd_limits.max_injected_chars is defined %}
+{%   set _ = _qmd_limits.update({'maxInjectedChars': _memory_qmd_limits.max_injected_chars}) %}
+{% endif %}
+{% set _qmd_sessions = {'enabled': _memory_qmd_sessions.enabled | default(false)} %}
+{% if _memory_qmd_sessions.retention_days is defined %}
+{%   set _ = _qmd_sessions.update({'retentionDays': _memory_qmd_sessions.retention_days}) %}
+{% endif %}
+{% if _memory_qmd_sessions.export_dir is defined %}
+{%   set _ = _qmd_sessions.update({'exportDir': _memory_qmd_sessions.export_dir}) %}
+{% endif %}
+{% set _qmd_config = {
+     'command': _memory_qmd.command | default('qmd'),
+     'searchMode': _memory_qmd.search_mode | default('search'),
+     'includeDefaultMemory': _memory_qmd.include_default_memory | default(true),
+     'update': _qmd_update,
+     'limits': _qmd_limits,
+     'sessions': _qmd_sessions,
+     'scope': _memory_qmd.scope | default({'default': 'deny', 'rules': [{'action': 'allow', 'match': {'chatType': 'direct'}}]})
+   } %}
+{% if _memory_qmd.rerank is defined %}
+{%   set _ = _qmd_config.update({'rerank': _memory_qmd.rerank}) %}
+{% endif %}
+{% if _memory_qmd.search_tool is defined %}
+{%   set _ = _qmd_config.update({'searchTool': _memory_qmd.search_tool}) %}
+{% endif %}
+{% if _memory_qmd.paths | default([]) | length > 0 %}
+{%   set _ = _qmd_config.update({'paths': _memory_qmd.paths}) %}
+{% endif %}
+  "memory": {
+    "backend": "qmd",
+    "citations": "{{ _memory_cfg.citations | default('auto') }}",
+    "qmd": {{ _qmd_config | to_nice_json(indent=2) | indent(6, false) }}
+  },
+{% endif %}
 {% set _mcp_servers = {} %}
 {% if slack_context_mcp.enabled | default(false) %}
 {%   set _slack_context_server = {
@@ -466,6 +541,80 @@
 {% for channel in _plugin_channels %}
 {%   set _ = _plugin_entries_out.update({channel: {'enabled': true}}) %}
 {% endfor %}
+{% if _memory_active.enabled | default(false) %}
+{%   set _memory_active_qmd = _memory_active.qmd | default({}) %}
+{%   set _active_config = {
+       'enabled': true,
+       'agents': _memory_active.agents | default([]),
+       'allowedChatTypes': _memory_active.allowed_chat_types | default(['direct']),
+       'queryMode': _memory_active.query_mode | default('recent'),
+       'promptStyle': _memory_active.prompt_style | default('balanced'),
+       'timeoutMs': _memory_active.timeout_ms | default(15000),
+       'maxSummaryChars': _memory_active.max_summary_chars | default(220),
+       'persistTranscripts': _memory_active.persist_transcripts | default(false),
+       'logging': _memory_active.logging | default(true),
+       'qmd': {
+         'searchMode': _memory_active_qmd.search_mode | default('inherit')
+       }
+     } %}
+{%   if _memory_active.model | default('') != '' %}
+{%     set _ = _active_config.update({'model': _memory_active.model}) %}
+{%   endif %}
+{%   if _memory_active.model_fallback | default('') != '' %}
+{%     set _ = _active_config.update({'modelFallback': _memory_active.model_fallback}) %}
+{%   endif %}
+{%   if _memory_active.thinking is defined %}
+{%     set _ = _active_config.update({'thinking': _memory_active.thinking}) %}
+{%   endif %}
+{%   if _memory_active.tools_allow is defined %}
+{%     set _ = _active_config.update({'toolsAllow': _memory_active.tools_allow}) %}
+{%   endif %}
+{%   if _memory_active.allowed_chat_ids is defined %}
+{%     set _ = _active_config.update({'allowedChatIds': _memory_active.allowed_chat_ids}) %}
+{%   endif %}
+{%   if _memory_active.denied_chat_ids is defined %}
+{%     set _ = _active_config.update({'deniedChatIds': _memory_active.denied_chat_ids}) %}
+{%   endif %}
+{%   set _ = _plugin_entries_out.update({'active-memory': {'enabled': true, 'config': _active_config}}) %}
+{% endif %}
+{% if _memory_dreaming.enabled | default(false) %}
+{%   set _dream_light = _memory_dreaming.light | default({}) %}
+{%   set _dream_rem = _memory_dreaming.rem | default({}) %}
+{%   set _dream_deep = _memory_dreaming.deep | default({}) %}
+{%   set _dream_deep_config = {
+       'enabled': _dream_deep.enabled | default(true),
+       'promotionTargetPath': _dream_deep.promotion_target_path | default('memory/promoted.md'),
+       'limit': _dream_deep.limit | default(10),
+       'minScore': _dream_deep.min_score | default(0.8),
+       'minRecallCount': _dream_deep.min_recall_count | default(3),
+       'minUniqueQueries': _dream_deep.min_unique_queries | default(3),
+       'maxPromotedSnippetTokens': _dream_deep.max_promoted_snippet_tokens | default(160)
+     } %}
+{%   if _dream_deep.max_age_days is defined %}
+{%     set _ = _dream_deep_config.update({'maxAgeDays': _dream_deep.max_age_days}) %}
+{%   endif %}
+{%   set _dream_config = {
+       'enabled': true,
+       'frequency': _memory_dreaming.frequency | default('0 3 * * *'),
+       'verboseLogging': _memory_dreaming.verbose_logging | default(false),
+       'phases': {
+         'light': {
+           'enabled': _dream_light.enabled | default(true)
+         },
+         'rem': {
+           'enabled': _dream_rem.enabled | default(true)
+         },
+         'deep': _dream_deep_config
+       }
+     } %}
+{%   if _memory_dreaming.timezone | default('') != '' %}
+{%     set _ = _dream_config.update({'timezone': _memory_dreaming.timezone}) %}
+{%   endif %}
+{%   if _memory_dreaming.model | default('') != '' %}
+{%     set _ = _dream_config.update({'model': _memory_dreaming.model}) %}
+{%   endif %}
+{%   set _ = _plugin_entries_out.update({'memory-core': {'enabled': true, 'config': {'dreaming': _dream_config}}}) %}
+{% endif %}
 {% if locksmith.enabled | default(true) %}
 {%   set _locksmith_projected_tools = {} %}
 {%   for tool in locksmith.tools | default([]) %}

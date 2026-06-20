@@ -131,6 +131,35 @@ That example uses one Slack Socket Mode account and `openclaw_bindings`:
 This avoids running two Slack Socket Mode clients against the same app token
 while still separating public and private agent state.
 
+### Aineko-Style Native Memory
+
+For private memory with public Slack isolation, use the example's
+`openclaw_memory` block:
+
+- enable QMD, active-memory, and dreaming only for the private agent
+- keep public agents at `memory.enabled: false` and `memory_search: false`
+- keep automated deep promotions in `memory/promoted.md`
+- do not run the legacy `.memory-queue` sidecar beside native active-memory
+
+Before and after a dreaming enablement or soak, capture and verify the memory
+guardrails:
+
+```bash
+scripts/verify-aineko-memory-guardrails.sh \
+  --workspace /home/openclaw/.openclaw/agents/matt/workspace \
+  --write-manifest /tmp/aineko-memory.before
+
+scripts/verify-aineko-memory-guardrails.sh \
+  --workspace /home/openclaw/.openclaw/agents/matt/workspace \
+  --public-workspace /home/openclaw/.openclaw/agents/public/workspace \
+  --canary "PRIVATE_MEMORY_CANARY_..." \
+  --check-manifest /tmp/aineko-memory.before
+```
+
+The check fails if bootstrap files changed, `MEMORY.md` shrank, a legacy queue is
+still present, automated promotion markers land in hot memory, or the private
+canary appears in a public workspace.
+
 ## Adding a New Model
 
 ### Local endpoint (Kamiwaza, Ollama, vLLM)

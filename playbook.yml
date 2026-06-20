@@ -34,6 +34,7 @@
         slack_context_mcp: "{{ _slack_context_mcp_defaults | default({}) | combine(slack_context_mcp | default({}), recursive=True) }}"
         llamafirewall: "{{ _llamafirewall_defaults | default({}) | combine(llamafirewall | default({}), recursive=True) }}"
         openclaw: "{{ _openclaw_defaults | default({}) | combine(openclaw | default({}), recursive=True) }}"
+        openclaw_memory: "{{ _openclaw_memory_defaults | default({}) | combine(openclaw_memory | default({}), recursive=True) }}"
         ollama: "{{ _ollama_defaults | default({}) | combine(ollama | default({}), recursive=True) }}"
         network: "{{ network_defaults | default({}) | combine(network | default({}), recursive=True) }}"
       tags: [always]
