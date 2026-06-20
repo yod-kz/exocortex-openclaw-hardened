@@ -38,6 +38,10 @@ openclaw_agents: []
 # matching the OpenClaw JSON schema. Agent-scoped channels use snake_case (bot_token).
 openclaw_channels: {}
 
+# Additional OpenClaw route/ACP bindings appended after automatically generated
+# per-agent channel account bindings.
+openclaw_bindings: []
+
 # Per-agent channel account defaults (used when agent defines slack/telegram block)
 _agent_slack_defaults:
   mode: "socket"

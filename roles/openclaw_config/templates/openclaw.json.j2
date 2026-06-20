@@ -135,6 +135,24 @@
 {% if agent.default | default(false) %}
         "default": true,
 {% endif %}
+{% if agent.model is defined %}
+        "model": {{ agent.model | to_nice_json(indent=2) }},
+{% endif %}
+{% if agent.models is defined %}
+        "models": {{ agent.models | to_nice_json(indent=2) }},
+{% endif %}
+{% if agent.context_tokens is defined %}
+        "contextTokens": {{ agent.context_tokens | to_json }},
+{% endif %}
+{% if agent.thinking_default is defined %}
+        "thinkingDefault": {{ agent.thinking_default | to_json }},
+{% endif %}
+{% if agent.verbose_default is defined %}
+        "verboseDefault": {{ agent.verbose_default | to_json }},
+{% endif %}
+{% if agent.params is defined %}
+        "params": {{ agent.params | to_nice_json(indent=2) }},
+{% endif %}
         "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/agents/{{ agent.workspace_subdir | default(agent.id) }}/workspace",
 {% if agent.skills is defined %}
         "skills": {{ agent.skills | to_json }},
@@ -244,6 +262,67 @@
          'groupPolicy': entry.slack.group_policy | default('allowlist'),
          'streaming': _slack_streaming
        } %}
+{%     if entry.slack.account_config is defined %}
+{%       set _ = _slack_acct.update(entry.slack.account_config) %}
+{%     endif %}
+{%     if entry.slack.enabled is defined %}
+{%       set _ = _slack_acct.update({'enabled': entry.slack.enabled}) %}
+{%     endif %}
+{%     if entry.slack.dm_policy is defined %}
+{%       set _ = _slack_acct.update({'dmPolicy': entry.slack.dm_policy}) %}
+{%     endif %}
+{%     if entry.slack.allow_from is defined %}
+{%       set _ = _slack_acct.update({'allowFrom': entry.slack.allow_from}) %}
+{%     endif %}
+{%     if entry.slack.default_to is defined %}
+{%       set _ = _slack_acct.update({'defaultTo': entry.slack.default_to}) %}
+{%     endif %}
+{%     if entry.slack.dm is defined %}
+{%       set _ = _slack_acct.update({'dm': entry.slack.dm}) %}
+{%     endif %}
+{%     if entry.slack.dms is defined %}
+{%       set _ = _slack_acct.update({'dms': entry.slack.dms}) %}
+{%     endif %}
+{%     if entry.slack.channels is defined %}
+{%       set _ = _slack_acct.update({'channels': entry.slack.channels}) %}
+{%     endif %}
+{%     if entry.slack.allow_bots is defined %}
+{%       set _ = _slack_acct.update({'allowBots': entry.slack.allow_bots}) %}
+{%     endif %}
+{%     if entry.slack.require_mention is defined %}
+{%       set _ = _slack_acct.update({'requireMention': entry.slack.require_mention}) %}
+{%     endif %}
+{%     if entry.slack.context_visibility is defined %}
+{%       set _ = _slack_acct.update({'contextVisibility': entry.slack.context_visibility}) %}
+{%     endif %}
+{%     if entry.slack.history_limit is defined %}
+{%       set _ = _slack_acct.update({'historyLimit': entry.slack.history_limit}) %}
+{%     endif %}
+{%     if entry.slack.dm_history_limit is defined %}
+{%       set _ = _slack_acct.update({'dmHistoryLimit': entry.slack.dm_history_limit}) %}
+{%     endif %}
+{%     if entry.slack.reply_to_mode is defined %}
+{%       set _ = _slack_acct.update({'replyToMode': entry.slack.reply_to_mode}) %}
+{%     endif %}
+{%     if entry.slack.reply_to_mode_by_chat_type is defined %}
+{%       set _ = _slack_acct.update({'replyToModeByChatType': entry.slack.reply_to_mode_by_chat_type}) %}
+{%     endif %}
+{%     if entry.slack.thread is defined %}
+{%       set _ = _slack_acct.update({'thread': entry.slack.thread}) %}
+{%     endif %}
+{%     if entry.slack.actions is defined %}
+{%       set _ = _slack_acct.update({'actions': entry.slack.actions}) %}
+{%     endif %}
+{%     if entry.slack.exec_approvals is defined %}
+{%       set _ = _slack_acct.update({'execApprovals': entry.slack.exec_approvals}) %}
+{%     endif %}
+{%     if entry.slack.socket_mode is defined %}
+{%       set _ = _slack_acct.update({'socketMode': entry.slack.socket_mode}) %}
+{%     endif %}
+{%     if entry.slack.capabilities is defined %}
+{%       set _ = _slack_acct.update({'capabilities': entry.slack.capabilities}) %}
+{%     endif %}
+{%     set _ = _slack_acct.update({'botToken': _slack_bot_token, 'appToken': _slack_app_token}) %}
 {%     if _slack_user_token | default('') != '' %}
 {%       set _ = _slack_acct.update({'userToken': _slack_user_token}) %}
 {%     endif %}
@@ -345,7 +424,7 @@
     }
   },
 {% endif %}
-{% if _agent_slack | length > 0 or _agent_telegram | length > 0 or _agent_discord | length > 0 %}
+{% if _agent_slack | length > 0 or _agent_telegram | length > 0 or _agent_discord | length > 0 or openclaw_bindings | default([]) | length > 0 %}
   "bindings": [
 {% set _all_bindings = [] %}
 {% for entry in _agent_slack %}
@@ -357,11 +436,18 @@
 {% for entry in _agent_discord %}
 {%   set _ = _all_bindings.append({'agentId': entry.agent.id, 'channel': 'discord', 'accountId': entry.agent.id}) %}
 {% endfor %}
+{% for binding in openclaw_bindings | default([]) %}
+{%   set _ = _all_bindings.append(binding) %}
+{% endfor %}
 {% for binding in _all_bindings %}
+{%   if binding.match is defined %}
+    {{ binding | to_nice_json(indent=2) | indent(4, false) }}{{ "," if not loop.last }}
+{%   else %}
     {
       "agentId": "{{ binding.agentId }}",
       "match": { "channel": "{{ binding.channel }}", "accountId": "{{ binding.accountId }}" }
     }{{ "," if not loop.last }}
+{%   endif %}
 {% endfor %}
   ],
 {% endif %}

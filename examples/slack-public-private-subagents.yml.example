@@ -1,0 +1,183 @@
+# Example: one Slack ingress account routed to private and public agents.
+#
+# Copy the relevant blocks into group_vars/agent_hosts/main.yml. Replace model
+# IDs, Slack IDs, channel IDs, and state repo paths before deploy.
+#
+# Shape:
+# - One native Slack Socket Mode account, owned by the "public" agent entry.
+# - OpenClaw route bindings send Matt's DM to the private "matt" agent.
+# - Everyone else's DMs and mentioned channel messages land on "public".
+# - "matt" can spawn trusted fast/smart subagents.
+# - "public" can spawn only the constrained public-fast subagent.
+# - Real Slack tokens stay in Locksmith env files; OpenClaw sees fake handles.
+
+locksmith:
+  enabled: true
+  env_files:
+    - "/home/openclaw/.config/locksmith/locksmith.env"
+  slack_native:
+    enabled: true
+    bot_token_env: "SLACK_BOT_TOKEN"
+    app_token_env: "SLACK_APP_TOKEN"
+    user_token_env: "SLACK_USER_TOKEN"
+
+openclaw_agents:
+  - id: "matt"
+    default: true
+    name: "Matt Private"
+    workspace_subdir: "matt"
+    memory_search: true
+    state_repo: "https://github.com/your-org/your-agents.git"
+    state_path: "agents/matt"
+    # model: "openai/gpt-5.5"
+    tools:
+      profile: "coding"
+      alsoAllow:
+        - "locksmith_github"
+        - "locksmith_slack"
+        - "sessions_spawn"
+        - "sessions_yield"
+        - "subagents"
+        - "untrusted_content_scan"
+        - "untrusted_content_reveal"
+    subagents:
+      allowAgents:
+        - "fast"
+        - "smart"
+      # model: "kzproxy/small-fast"
+
+  - id: "fast"
+    name: "Fast Subagent"
+    workspace_subdir: "fast"
+    memory_search: false
+    # model: "kzproxy/small-fast"
+    tools:
+      profile: "coding"
+      alsoAllow:
+        - "locksmith_github"
+        - "locksmith_slack"
+
+  - id: "smart"
+    name: "Smart Subagent"
+    workspace_subdir: "smart"
+    memory_search: false
+    # model: "kzproxy/big-smart"
+    tools:
+      profile: "coding"
+      alsoAllow:
+        - "locksmith_github"
+        - "locksmith_slack"
+
+  - id: "public"
+    name: "Public Slack"
+    workspace_subdir: "public"
+    memory_search: false
+    state_repo: "https://github.com/your-org/your-agents.git"
+    state_path: "agents/public"
+    # model: "kzproxy/big-smart"
+    tools:
+      profile: "messaging"
+      alsoAllow:
+        - "subagents"
+        - "sessions_yield"
+        - "untrusted_content_scan"
+      deny:
+        - "group:runtime"
+        - "group:fs"
+        - "group:automation"
+        - "group:nodes"
+        - "group:memory"
+        - "cron"
+        - "gateway"
+        - "locksmith_github"
+        - "locksmith_slack"
+    subagents:
+      allowAgents:
+        - "public-fast"
+    slack:
+      # Tokenless native Slack. The renderer emits xoxb-locksmith-public and
+      # xapp-locksmith-public, and Locksmith maps those to host-side secrets.
+      dm_policy: "open"
+      allow_from:
+        - "*"
+      default_to: "user:U06AEGM6QS2"
+      group_policy: "open"
+      allow_bots: false
+      channels:
+        "*":
+          requireMention: true
+          tools:
+            deny:
+              - "group:runtime"
+              - "group:fs"
+              - "group:automation"
+              - "group:nodes"
+              - "group:memory"
+              - "cron"
+              - "gateway"
+              - "locksmith_github"
+              - "locksmith_slack"
+        # Optional: let only an admin channel route to Matt's private agent via
+        # openclaw_bindings below. Keep this keyed by Slack channel ID.
+        C012345ADMIN:
+          requireMention: true
+          users:
+            - "U06AEGM6QS2"
+
+  - id: "public-fast"
+    name: "Public Fast Subagent"
+    workspace_subdir: "public-fast"
+    memory_search: false
+    # model: "kzproxy/small-fast"
+    tools:
+      profile: "messaging"
+      deny:
+        - "group:runtime"
+        - "group:fs"
+        - "group:automation"
+        - "group:nodes"
+        - "group:memory"
+        - "cron"
+        - "gateway"
+        - "locksmith_github"
+        - "locksmith_slack"
+
+# Additional bindings are appended after the automatic account binding
+# { channel: slack, accountId: public } -> public. Exact peer bindings win over
+# the account fallback, so channel messages not matched here stay public.
+openclaw_bindings:
+  - type: "route"
+    agentId: "matt"
+    comment: "Matt's Slack DM routes to the private agent and private memory."
+    match:
+      channel: "slack"
+      accountId: "public"
+      peer:
+        kind: "direct"
+        id: "U06AEGM6QS2"
+    session:
+      dmScope: "per-channel-peer"
+
+  - type: "route"
+    agentId: "matt"
+    comment: "Optional private admin Slack channel."
+    match:
+      channel: "slack"
+      accountId: "public"
+      peer:
+        kind: "channel"
+        id: "C012345ADMIN"
+    session:
+      dmScope: "per-channel-peer"
+
+  - type: "route"
+    agentId: "public"
+    comment: "Everyone else's Slack DMs route to the public agent."
+    match:
+      channel: "slack"
+      accountId: "public"
+      peer:
+        kind: "direct"
+        id: "*"
+    session:
+      dmScope: "per-channel-peer"

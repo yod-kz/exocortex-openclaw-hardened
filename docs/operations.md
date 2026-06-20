@@ -114,6 +114,23 @@ To let agents communicate in a shared Telegram group:
 
 3. Create a Telegram group and add both bots
 
+### Public Slack With Private Admin Agent
+
+For a multi-user Slack app where anyone can DM or mention the bot but only Matt
+gets the private workspace, memory, and stronger tools, start from
+`examples/slack-public-private-subagents.yml.example`.
+
+That example uses one Slack Socket Mode account and `openclaw_bindings`:
+
+- exact direct peer `U06AEGM6QS2` routes to the private `matt` agent
+- wildcard direct peers and the Slack account fallback route to `public`
+- private `matt` can spawn trusted `fast`/`smart` subagents
+- `public` can spawn only `public-fast`
+- Slack credentials remain host-side in Locksmith credential transport
+
+This avoids running two Slack Socket Mode clients against the same app token
+while still separating public and private agent state.
+
 ## Adding a New Model
 
 ### Local endpoint (Kamiwaza, Ollama, vLLM)

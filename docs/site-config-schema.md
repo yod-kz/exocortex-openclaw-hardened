@@ -273,8 +273,8 @@ Core OpenClaw gateway and agent runtime settings.
 ### openclaw_agents
 
 Each entry in `openclaw_agents` renders to `agents.list[]` in OpenClaw config.
-Common fields are `id`, `name`, `default`, `workspace_subdir`,
-`memory_search`, `skills`, `state_repo`, and `state_path`.
+Common fields are `id`, `name`, `default`, `workspace_subdir`, `model`,
+`models`, `memory_search`, `skills`, `state_repo`, and `state_path`.
 
 For hardened gateway/untrusted layouts, the config renderer also passes through
 these optional OpenClaw-native blocks without interpreting them:
@@ -293,6 +293,33 @@ firewall or credential config: a broad `tools`, `subagents`, or `sandbox`
 override can intentionally expand an agent's authority. The role passes them
 through to avoid fork-only OpenClaw core patches; it does not attempt to
 re-implement OpenClaw's policy schema in Ansible.
+
+### openclaw_bindings
+
+Additional OpenClaw route or ACP bindings appended after the automatically
+generated per-agent channel account bindings. Use this when one channel account
+should route different peers to different agents, for example one Slack Socket
+Mode app where Matt's DM routes to a private agent and wildcard DMs route to a
+public constrained agent.
+
+Example:
+
+```yaml
+openclaw_bindings:
+  - type: "route"
+    agentId: "matt"
+    match:
+      channel: "slack"
+      accountId: "public"
+      peer:
+        kind: "direct"
+        id: "U06AEGM6QS2"
+    session:
+      dmScope: "per-channel-peer"
+```
+
+OpenClaw route matching supports `peer.id: "*"` for wildcard peers. Exact peer
+bindings win over wildcard/account fallback bindings.
 
 #### Sandbox Modes
 
@@ -472,7 +499,16 @@ presence and are only reachable via the gateway UI.
 | `slack.user_handle` | string | `xoxp-locksmith-<agent>` | Optional fake user-token handle rendered into OpenClaw when native Slack transport is enabled |
 | `slack.credential_proxy.enabled` | bool | `locksmith.slack_native.enabled` | Disable to render raw `slack.bot_token`/`slack.app_token` into OpenClaw intentionally |
 | `slack.mode` | string | `socket` | Connection mode: `socket` or `http` |
+| `slack.dm_policy` | string | inherited OpenClaw default (`pairing`) | DM access policy rendered as `dmPolicy`; `open` requires `slack.allow_from: ["*"]` |
+| `slack.allow_from` | list | inherited OpenClaw default | DM/operator allowlist rendered as `allowFrom` |
+| `slack.default_to` | string | *(none)* | Default outbound Slack target such as `user:U...` |
 | `slack.group_policy` | string | `allowlist` | Channel access policy (`allowlist` or `open`) |
+| `slack.channels` | object | *(none)* | Account-scoped Slack channel policy rendered verbatim as `channels.slack.accounts.<agent>.channels` |
+| `slack.dms` | object | *(none)* | Account-scoped Slack DM policy rendered verbatim as `dms` |
+| `slack.dm` | object | *(none)* | Account-scoped Slack DM policy rendered verbatim as `dm` |
+| `slack.allow_bots` | bool/string | *(none)* | Account-level `allowBots` override |
+| `slack.require_mention` | bool | *(none)* | Account-level `requireMention` override |
+| `slack.account_config` | object | *(none)* | Advanced OpenClaw-native Slack account fields merged into the rendered account; generated fake token handles still win |
 | `slack.streaming` | object/string | `{mode: partial}` | Stream preview mode. Object form is canonical; legacy scalar values are normalized by the template. |
 
 ### Agent Telegram identity (`openclaw_agents[].telegram`)
