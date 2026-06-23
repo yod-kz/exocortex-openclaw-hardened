@@ -223,6 +223,10 @@ the corpus volume.
      tls_skip_verify: true
    ```
 
+   Set `dynamic_catalog: true` when the endpoint should refresh its visible
+   OpenClaw model catalog from `/v1/models`; `provider_name: kzproxy` does this
+   by default.
+
 3. Redeploy LlamaFirewall to register the new upstream, then config:
    ```bash
    ./run.sh --ask-vault-pass --tags llamafirewall,config

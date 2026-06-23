@@ -157,6 +157,10 @@ inference:
       tls_skip_verify: true       # For self-signed certs
 ```
 
+For a local gateway whose model list changes, set `dynamic_catalog: true`.
+`provider_name: "kzproxy"` enables this automatically and keeps the OpenClaw
+model picker synced from the gateway's `/v1/models` endpoint.
+
 Add cloud provider domains to the Pipelock allowlist:
 
 ```yaml

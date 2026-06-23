@@ -63,6 +63,7 @@ live in `roles/<role>/defaults/main.yml` and are overridden by site config.
 | `reasoning` | bool | yes | Whether the model supports extended reasoning |
 | `primary` | bool | yes | Mark one endpoint as the default model |
 | `tls_skip_verify` | bool | yes | Skip TLS certificate verification for self-signed certs |
+| `dynamic_catalog` | bool | no | Render an OpenClaw provider wildcard and discover `/v1/models` at runtime instead of baking a static model row. Defaults to `true` for `provider_name: kzproxy` and `false` otherwise |
 | `location` | string | no | `cloud` for cloud endpoints; omit for LAN |
 | `api_key` | string | no | API key (use vault reference); required for cloud endpoints |
 | `api_key_header` | string | no | Header name for the key (e.g. `Authorization`, `x-api-key`) |

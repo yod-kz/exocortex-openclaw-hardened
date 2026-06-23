@@ -70,6 +70,7 @@
     "mode": "merge",
     "providers": {
 {% for ep in _eps %}
+{% set _dynamic_catalog = ep.dynamic_catalog | default(ep.provider_name == 'kzproxy') %}
       "{{ ep.provider_name }}": {
 {% if llamafirewall.enabled | default(false) %}
         "baseUrl": "http://{{ llamafirewall.connect_host | default(llamafirewall.listen_host) }}:{{ llamafirewall.listen_port }}/{{ ep.provider_name }}/v1",
@@ -82,6 +83,9 @@
         "apiKey": "{{ ep.api_key | default('not-required') }}",
 {% endif %}
         "api": "{{ ep.api_type }}",
+{% if _dynamic_catalog %}
+        "models": []
+{% else %}
         "models": [
           {
             "id": "{{ ep.model_id }}",
@@ -93,6 +97,7 @@
             "maxTokens": {{ ep.max_tokens }}
           }
         ]
+{% endif %}
       }{{ "," if not loop.last }}
 {% endfor %}
     }
@@ -105,12 +110,17 @@
       },
       "models": {
 {% for ep in _eps %}
+{% set _dynamic_catalog = ep.dynamic_catalog | default(ep.provider_name == 'kzproxy') %}
+{% if _dynamic_catalog %}
+        "{{ ep.provider_name }}/*": {}{{ "," if not loop.last }}
+{% else %}
         "{{ ep.provider_name }}/{{ ep.model_id }}": {
           "alias": "{{ ep.model_id | lower | replace('_','-') | replace('/','-') }}"
 {% if ep.params is defined %}
           ,"params": {{ ep.params | to_json }}
 {% endif %}
         }{{ "," if not loop.last }}
+{% endif %}
 {% endfor %}
       },
       "workspace": "{{ openclaw_data_dir | default('/home/openclaw/.openclaw') }}/{% if _default_agent %}agents/{{ _default_agent.workspace_subdir | default(_default_agent.id) }}/workspace{% else %}workspace{% endif %}",
